@@ -1,5 +1,4 @@
 import torch
-from ignite.contrib.metrics import ROC_AUC
 import sklearn
 def roc_auc(output, target):
     output = torch.sigmoid(output)

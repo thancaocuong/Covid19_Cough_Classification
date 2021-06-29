@@ -26,21 +26,23 @@ class PlainCNN(BaseModel):
     def __init__(self, inchannels=3, num_classes=1, pretrained=True):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels=inchannels, 
-                              out_channels=128,
+                              out_channels=64,
                               kernel_size=(3, 3), stride=(1, 1),
                               padding=(1, 1), bias=False)
         self.act0 = nn.ReLU()
         self.max_pool1 = nn.MaxPool2d(2)
-        self.conv2 = nn.Conv2d(in_channels=128, 
-                              out_channels=256,
-                              kernel_size=(3, 3), stride=(1, 1),
+        self.conv2 = nn.Conv2d(in_channels=64, 
+                              out_channels=64,
+                              kernel_size=(2, 2), stride=(1, 1),
                               padding=(1, 1), bias=False)
-        self.bn1 = nn.BatchNorm2d(256)
+        self.bn1 = nn.BatchNorm2d(64)
         self.act1 = nn.ReLU()
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc1 = nn.Linear(256, 256, bias=True)
-        self.fc2 = nn.Linear(256, num_classes, bias=True)
+        self.fc1 = nn.Linear(64, 256, bias=True)
+        self.fc2 = nn.Linear(256, 128, bias=True)
+        self.fc3 = nn.Linear(128, 1)
         self.drop = nn.Dropout(0.3)
+
     def forward(self, x):
         x = x.float()
         x = self.conv1(x)
@@ -52,8 +54,10 @@ class PlainCNN(BaseModel):
         x = self.pool(x).view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         x = self.drop(x)
-        x = self.fc2(x)
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
         return x
+
     def freeze(self):
         pass
         # print("freeze feature_extractor")
