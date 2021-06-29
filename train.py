@@ -1,6 +1,7 @@
 import argparse
 import collections
 import os
+import gc
 import torch
 import numpy as np
 import pandas as pd
@@ -8,11 +9,13 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from data_loader import CovidDataset
+from data_loader import CovidDataset, TestDataset
 from data_loader import AudioCompose, WhiteNoise, TimeShift, ChangePitch, ChangeSpeed
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion
 from parse_config import ConfigParser
 from trainer import Trainer
 from utils import prepare_device
+import torchvision
 
 
 # fix random seeds for reproducibility
@@ -29,16 +32,29 @@ def init_dataset(csv_path, fold_idx=1, audio_folder=""):
     df = pd.read_csv(df_path)
     eval_df = df[df["fold"] == fold_idx]
     train_df = df[df["fold"] != fold_idx]
-    train_audio_transform = AudioCompose([WhiteNoise(0.005),
-                                          ChangePitch(),
-                                          TimeShift(),
-                                          ChangeSpeed()])
+    # train_audio_transform = AudioCompose([WhiteNoise(0.005),
+    #                                       TimeShift(),
+    #                                       ChangeSpeed()])
+    train_audio_transform = Compose([
+                    AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
+                    TimeStretch(min_rate=0.8, max_rate=1.25, p=0.5),
+                    PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
+                    Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
+                    PolarityInversion(p=0.5),
+                    Gain()
+                ])
+    # train_audio_transform = None
     train_dataset = CovidDataset(
             df=train_df,
             audio_folder=audio_folder,
             audio_transforms=train_audio_transform,
             image_transform=None,
         )
+    eval_image_transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToPILImage(),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
     validation_dataset = CovidDataset(
                                 df=eval_df,
                                 audio_folder=audio_folder,
@@ -46,6 +62,10 @@ def init_dataset(csv_path, fold_idx=1, audio_folder=""):
                                 image_transform=None,
                             )
     return train_dataset, validation_dataset
+
+def init_unlabeled_dataset(csv_path, audio_folder=""):
+    return  TestDataset(csv_path, audio_folder)
+
 
 def main(config, fold_idx):
     logger = config.get_logger('train')
@@ -65,7 +85,18 @@ def main(config, fold_idx):
         batch_size=config["dataset"]['validate_batch_size'], 
         num_workers=config["dataset"]['num_workers']
     )
-
+    unlabeled_loader = None
+    if config["do_pseudo"]:
+        unlabeled_dataset = init_unlabeled_dataset(config["unlabeled_dataset"]["csv_path"],
+                                                config["unlabeled_dataset"]["audio_folder"]
+                                                )
+        unlabeled_loader = torch.utils.data.DataLoader(
+                    unlabeled_dataset,
+                    batch_size=config["unlabeled_dataset"]['training_batch_size'], 
+                    num_workers=config["unlabeled_dataset"]['num_workers'],
+                    shuffle=True,
+                    drop_last = True
+                    )
     # build model architecture, then print to console
     model = config.init_obj('arch', module_arch)
     logger.info(model)
@@ -90,9 +121,16 @@ def main(config, fold_idx):
                       device=device,
                       data_loader=train_loader,
                       valid_data_loader=eval_loader,
-                      lr_scheduler=lr_scheduler)
+                      unlabeled_loader=unlabeled_loader,
+                      lr_scheduler=lr_scheduler,
+                      fold_idx=fold_idx
+                      )
 
     trainer.train()
+    model = model.to("cpu")
+    del model, optimizer, trainer
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':

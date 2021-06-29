@@ -48,7 +48,9 @@ class BaseTrainer:
             self._resume_checkpoint(config.resume)
         if not os.path.exists(config.log_dir):
             os.makedirs(config.log_dir)
-
+    @abstractmethod
+    def _semi_train_epoch(self):
+        raise NotImplementedError
     @abstractmethod
     def _train_epoch(self, epoch):
         """
@@ -64,6 +66,10 @@ class BaseTrainer:
         """
         not_improved_count = 0
         for epoch in range(self.start_epoch, self.epochs + 1):
+            if epoch < self.epochs // 2:
+                self.model.freeze()
+            else:
+                self.model.unfreeze()
             result = self._train_epoch(epoch)
 
             # save logged informations into log dict
@@ -101,8 +107,12 @@ class BaseTrainer:
 
             if epoch % self.save_period == 0:
                 self._save_checkpoint(epoch, save_best=best)
-
-    def _save_checkpoint(self, epoch, save_best=False):
+        log_do_semi = self._semi_train_epoch()
+        if log_do_semi:
+            self._save_checkpoint(100, save_best=best, is_semi=True)
+            for key, value in log_do_semi.items():
+                self.logger.info('    {:15s}: {}'.format(str(key), value))
+    def _save_checkpoint(self, epoch, save_best=False, is_semi=False):
         """
         Saving checkpoints
 
@@ -121,8 +131,11 @@ class BaseTrainer:
         }
         # filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
         filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}.pth'.format(self.fold_idx))
+        if is_semi:
+            filename = os.path.join(self.checkpoint_dir, 'pseudo_checkpoint_fold{}.pth'.format(self.fold_idx))
         torch.save(state, filename)
         self.logger.info("Saving checkpoint: {} ...".format(filename))
+
         if save_best:
             best_path = str(self.checkpoint_dir / 'model_best.pth')
             best_path = os.path.join(self.checkpoint_dir, 'model_best_fold{}'.format(self.fold_idx))
