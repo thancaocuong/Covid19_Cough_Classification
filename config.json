@@ -1,17 +1,17 @@
 {
-    "name": "Covid19-resnet50",
+    "name": "Covid19-resnet18",
     "n_gpu": 1,
 
     "arch": {
         "type": "Covid19",
-        "args": {"model_name": "resnet50",
+        "args": {"model_name": "resnet18",
                  "num_classes": 1,
                  "pretrained": true}
     },
     "dataset": {
         "csv_path": "/home/ubuntu/cuong_test/pytorch-template/split_5_fold.csv",
         "audio_folder": "/home/ubuntu/cuong_test/AICOVIDVN/dataset/train_audio_files_8k",
-        "training_batch_size": 32,
+        "training_batch_size": 128,
         "validate_batch_size": 32,
         "num_workers": 10
     },

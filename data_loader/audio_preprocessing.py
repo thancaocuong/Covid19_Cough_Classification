@@ -45,9 +45,9 @@ def trim_and_pad(audio, max_samples):
     return audio
 
 def extract_mfcc_feature(audio, fs, audio_transforms=None):
-    n_mfcc=13
+    n_mfcc=15
     n_fft=1024
-    hop_length= 512
+    hop_length= 256
     max_samples = int(7.5 * 8000) # 7.5s
     if audio_transforms is not None:
         try:

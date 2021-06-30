@@ -11,12 +11,12 @@ import model.metric as module_metric
 import model.model as module_arch
 from data_loader import CovidDataset, TestDataset
 from data_loader import AudioCompose, WhiteNoise, TimeShift, ChangePitch, ChangeSpeed
-from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion, AddGaussianSNR
 from parse_config import ConfigParser
 from trainer import Trainer
 from utils import prepare_device
 import torchvision
-
+from audiomentations.core.composition import BaseCompose
 
 # fix random seeds for reproducibility
 SEED = 123
@@ -24,6 +24,25 @@ torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 np.random.seed(SEED)
+import random
+random.seed(SEED)
+class OneOf(BaseCompose):
+    # TODO: Name can change to WaveformCompose
+    def __init__(self, transforms, p=1.0, shuffle=False):
+        super(OneOf, self).__init__(transforms, p, shuffle)
+    def __call__(self, samples, sample_rate):
+        transforms = self.transforms.copy()
+        if random.random() < self.p:
+            random.shuffle(transforms)
+            for transform in transforms:
+                samples = transform(samples, sample_rate)
+                break
+
+        return samples
+
+    def randomize_parameters(self, samples, sample_rate):
+        for transform in self.transforms:
+            transform.randomize_parameters(samples, sample_rate)
 
 def init_dataset(csv_path, fold_idx=1, audio_folder=""):
     print("*"*10, " fold {}".format(fold_idx), "*"*10)
@@ -35,14 +54,15 @@ def init_dataset(csv_path, fold_idx=1, audio_folder=""):
     # train_audio_transform = AudioCompose([WhiteNoise(0.005),
     #                                       TimeShift(),
     #                                       ChangeSpeed()])
-    train_audio_transform = Compose([
-                    AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-                    TimeStretch(min_rate=0.8, max_rate=1.25, p=0.5),
+    train_audio_transform = OneOf([
+                    # AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
+                    AddGaussianSNR(min_SNR=0.1, max_SNR=0.56, p=0.5), # new
+                    TimeStretch(min_rate=0.9, max_rate=1.2, p=0.5),
                     PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
                     Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
                     PolarityInversion(p=0.5),
                     Gain()
-                ])
+                ], p=1.0)
     # train_audio_transform = None
     train_dataset = CovidDataset(
             df=train_df,
@@ -50,11 +70,7 @@ def init_dataset(csv_path, fold_idx=1, audio_folder=""):
             audio_transforms=train_audio_transform,
             image_transform=None,
         )
-    eval_image_transform = torchvision.transforms.Compose([
-            torchvision.transforms.ToPILImage(),
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
+
     validation_dataset = CovidDataset(
                                 df=eval_df,
                                 audio_folder=audio_folder,
