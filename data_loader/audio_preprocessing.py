@@ -44,11 +44,15 @@ def trim_and_pad(audio, max_samples):
     
     return audio
 
-def extract_mfcc_feature(audio, fs, audio_transforms=None):
-    n_mfcc=15
-    n_fft=1024
-    hop_length= 256
-    max_samples = int(7.5 * 8000) # 7.5s
+def extract_mfcc_feature(audio, fs, mfcc_config, audio_transforms=None):
+    # n_mfcc=15
+    # n_fft=1024
+    # hop_length= 256
+    # max_samples = int(7.5 * 8000) # 7.5s
+    n_mfcc = mfcc_config.get("n_mfcc", 15)
+    n_fft = mfcc_config.get("n_fft", 1024)
+    hop_length = mfcc_config.get("hop_length", 256)
+    max_samples = mfcc_config.get("max_samples", int(7.5 * 8000))
     if audio_transforms is not None:
         try:
             audio, fs = audio_transforms(audio, fs)

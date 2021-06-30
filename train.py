@@ -44,7 +44,7 @@ class OneOf(BaseCompose):
         for transform in self.transforms:
             transform.randomize_parameters(samples, sample_rate)
 
-def init_dataset(csv_path, fold_idx=1, audio_folder=""):
+def init_dataset(csv_path, mfcc_config=None, fold_idx=1, audio_folder=""):
     print("*"*10, " fold {}".format(fold_idx), "*"*10)
     """StratifiedKFold"""
     df_path = os.path.join(csv_path)
@@ -66,6 +66,7 @@ def init_dataset(csv_path, fold_idx=1, audio_folder=""):
     # train_audio_transform = None
     train_dataset = CovidDataset(
             df=train_df,
+            mfcc_config=mfcc_config,
             audio_folder=audio_folder,
             audio_transforms=train_audio_transform,
             image_transform=None,
@@ -73,19 +74,21 @@ def init_dataset(csv_path, fold_idx=1, audio_folder=""):
 
     validation_dataset = CovidDataset(
                                 df=eval_df,
+                                mfcc_config=mfcc_config,
                                 audio_folder=audio_folder,
                                 audio_transforms=None,
                                 image_transform=None,
                             )
     return train_dataset, validation_dataset
 
-def init_unlabeled_dataset(csv_path, audio_folder=""):
-    return  TestDataset(csv_path, audio_folder)
+def init_unlabeled_dataset(csv_path, audio_folder="", mfcc_config=None):
+    return  TestDataset(csv_path, audio_folder, mfcc_config)
 
 
 def main(config, fold_idx):
     logger = config.get_logger('train')
     train_dataset, val_dataset = init_dataset(config["dataset"]["csv_path"],
+                                              config["dataset"]["mfcc_config"],  
                                              fold_idx,
                                              config["dataset"]["audio_folder"])
     # setup data_loader instances
@@ -104,7 +107,8 @@ def main(config, fold_idx):
     unlabeled_loader = None
     if config["do_pseudo"]:
         unlabeled_dataset = init_unlabeled_dataset(config["unlabeled_dataset"]["csv_path"],
-                                                config["unlabeled_dataset"]["audio_folder"]
+                                                config["unlabeled_dataset"]["audio_folder"],
+                                                config["dataset"]["mfcc_config"],
                                                 )
         unlabeled_loader = torch.utils.data.DataLoader(
                     unlabeled_dataset,

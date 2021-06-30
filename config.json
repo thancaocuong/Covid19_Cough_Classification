@@ -13,7 +13,11 @@
         "audio_folder": "/home/ubuntu/cuong_test/AICOVIDVN/dataset/train_audio_files_8k",
         "training_batch_size": 128,
         "validate_batch_size": 32,
-        "num_workers": 10
+        "num_workers": 10,
+        "mfcc_config":
+            {
+                "n_mfcc": 15, "n_fft": 1024, "hop_length": 256, "max_samples": 60000
+            }
     },
     "data_loader": {
         "type": "MnistDataLoader",
