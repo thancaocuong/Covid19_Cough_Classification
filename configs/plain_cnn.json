@@ -7,17 +7,18 @@
         "args": {
                  "num_classes": 1,
                  "inchannels": 1,
+		          "use_coord": true,
                  "pretrained": true}
     },
     "do_pseudo": false,
     "unlabeled_dataset": {
-        "csv_path": "/home/ubuntu/cuong_test/AICOVIDVN/dataset/aicv115m_public_test/metadata_public_test.csv",
-        "audio_folder": "/home/ubuntu/cuong_test/AICOVIDVN/dataset/aicv115m_public_test/public_test_audio_files_8k/",
+        "csv_path": "/media/sonnh/AICOVIDVN/aicv115m_private_test/metadata_private_test.csv",
+        "audio_folder": "/media/sonnh/AICOVIDVN/aicv115m_private_test/private_test_audio_files_8k/",
         "training_batch_size": 16,
         "num_workers": 10,
         "mfcc_config":
             {
-                "n_mfcc": 15, "n_fft": 1024, "hop_length": 256, "max_samples": 60000
+                "do_remove_silent": true, "n_mfcc": 15, "n_fft": 1024, "hop_length": 256, "max_samples": 80000
             }
     },
     "dataset": {
@@ -28,7 +29,7 @@
         "num_workers": 10,
         "mfcc_config":
             {
-                "n_mfcc": 15, "n_fft": 1024, "hop_length": 256, "max_samples": 60000
+                "do_remove_silent": true, "n_mfcc": 15, "n_fft": 1024, "hop_length": 256, "max_samples": 80000
             }
     },
     "data_loader": {
@@ -54,7 +55,7 @@
     "lr_scheduler": {
         "type": "StepLR",
         "args": {
-            "step_size": 30,
+            "step_size": 40,
             "gamma": 0.1
         }
     },

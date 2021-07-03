@@ -65,6 +65,7 @@ class BaseTrainer:
         Full training logic
         """
         not_improved_count = 0
+        best_epoch = 1
         for epoch in range(self.start_epoch, self.epochs + 1):
             if epoch < self.epochs // 2:
                 self.model.freeze()
@@ -97,6 +98,7 @@ class BaseTrainer:
                     self.mnt_best = log[self.mnt_metric]
                     not_improved_count = 0
                     best = True
+                    best_epoch = epoch
                 else:
                     not_improved_count += 1
 
@@ -107,6 +109,9 @@ class BaseTrainer:
 
             if epoch % self.save_period == 0:
                 self._save_checkpoint(epoch, save_best=best)
+        self.logger.info("[Fold-{}]: Best score: {} at epoch {}".format(self.fold_idx,
+                                                                        self.mnt_best,
+                                                                        best_epoch))
         log_do_semi = self._semi_train_epoch()
         if log_do_semi:
             self._save_checkpoint(100, save_best=best, is_semi=True)

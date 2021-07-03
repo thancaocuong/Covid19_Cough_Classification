@@ -3,29 +3,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel
 import timm
+from .coordconv import CoordConv1d, CoordConv2d, CoordConv3d
 
-class MnistModel(BaseModel):
-    def __init__(self, num_classes=10):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.conv2_drop = nn.Dropout2d()
-        self.fc1 = nn.Linear(320, 50)
-        self.fc2 = nn.Linear(50, num_classes)
 
-    def forward(self, x):
-        x = F.relu(F.max_pool2d(self.conv1(x), 2))
-        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
-        x = x.view(-1, 320)
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
-        x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
+
 
 class PlainCNN(BaseModel):
-    def __init__(self, inchannels=3, num_classes=1, pretrained=True):
+    def __init__(self, inchannels=3, num_classes=1, use_coord=False, pretrained=True):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels=inchannels, 
+        if use_coord:
+            self.conv1 = CoordConv2d(inchannels,
+                                    out_channels=64,
+                                    kernel_size=(3, 3),
+                                    stride=(1, 1),
+                                    padding=(1, 1),
+                                    with_r=True)
+        else:
+            self.conv1 = nn.Conv2d(in_channels=inchannels, 
                               out_channels=64,
                               kernel_size=(3, 3), stride=(1, 1),
                               padding=(1, 1))
@@ -70,21 +64,18 @@ class PlainCNN(BaseModel):
         x = self.fc3(x)
         return x
 
-    def freeze(self):
-        pass
-        # print("freeze feature_extractor")
-        # for param in self.backbone.parameters():
-        #     param.require_grad = False
-
-    def unfreeze(self):
-        pass
-        # for param in self.backbone.parameters():
-        #     param.require_grad = True
-
 class PlainCNNSmall(BaseModel):
-    def __init__(self, inchannels=3, num_classes=1, pretrained=True):
+    def __init__(self, inchannels=3, num_classes=1, use_coord=False, pretrained=True):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels=inchannels, 
+        if use_coord:
+            self.conv1 = CoordConv2d(inchannels,
+                                    out_channels=64,
+                                    kernel_size=(3, 3),
+                                    stride=(1, 1),
+                                    padding=(1, 1),
+                                    with_r=True)
+        else:
+            self.conv1 = nn.Conv2d(in_channels=inchannels, 
                               out_channels=64,
                               kernel_size=(3, 3), stride=(1, 1),
                               padding=(1, 1))
@@ -128,17 +119,6 @@ class PlainCNNSmall(BaseModel):
 
         x = self.fc3(x)
         return x
-
-    def freeze(self):
-        pass
-        # print("freeze feature_extractor")
-        # for param in self.backbone.parameters():
-        #     param.require_grad = False
-
-    def unfreeze(self):
-        pass
-        # for param in self.backbone.parameters():
-        #     param.require_grad = True
 
 class FinetuneEfficientNet(BaseModel):
     def __init__(self, model_name, inchannels=3, num_classes=1, pretrained=True):

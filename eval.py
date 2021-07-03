@@ -29,18 +29,19 @@ def post_process_function(output_tensor):
     return fussion_prob
 
 class EnsembleModel(torch.nn.Module):
-    def __init__(self, models, post_process_func=None):
+    def __init__(self, models, post_process_func=None, weights=[0.2, 0.2, 0.2, 0.2, 0.2]):
         super().__init__()
         self.models = models
         self.post_process_func = post_process_func
+        self.weights = weights
     def forward(self, input, post_process_func=None):
         outputs = []
         for i in range(len(self.models)):
             output = self.models[i](input)
-            outputs.append(output)
+            outputs.append(self.weights[i]*torch.sigmoid(output))
         if self.post_process_func is not None:
             return self.post_process_func(outputs)
-        return torch.mean(torch.stack(outputs))
+        return torch.sum(torch.stack(outputs))
 
 def init_unlabeled_dataset(csv_path, audio_folder=""):
     return  TestDataset(csv_path, audio_folder)
@@ -50,11 +51,11 @@ def main(config):
                                                 config["unlabeled_dataset"]["audio_folder"]
                                                 )
     device, device_ids = prepare_device(config['n_gpu'])
-    CHECKPOINT = ["checkpoints/model_best_fold1.pth",
-        "checkpoints/model_best_fold2.pth",
-        "checkpoints/model_best_fold3.pth",
-        "checkpoints/model_best_fold4.pth",
-        "checkpoints/model_best_fold5.pth"
+    CHECKPOINT = ["saved/models/Covid19-PlainCNN/0630_172028/model_best_fold1"
+        "saved/models/Covid19-PlainCNN/0630_172028/model_best_fold2",
+        "saved/models/Covid19-PlainCNN/0630_172028/model_best_fold3",
+        "saved/models/Covid19-PlainCNN/0630_172028/model_best_fold4",
+        "saved/models/Covid19-PlainCNN/0630_172028/model_best_fold5"
         ]
     models = []
     for i in range(len(CHECKPOINT)):
@@ -63,7 +64,7 @@ def main(config):
         model.load_state_dict(state)
         model = model.to(device)
         models.append(model.eval())
-    ensemble_model = EnsembleModel(models, post_process_function)
+    ensemble_model = EnsembleModel(models, None)
     ensemble_model.cuda().eval()
     results = pd.DataFrame(columns=['uuid', 'assessment_result'])
     progress_bar = tqdm(total=len(unlabeled_dataset))

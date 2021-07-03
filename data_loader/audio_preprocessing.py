@@ -44,23 +44,6 @@ def trim_and_pad(audio, max_samples):
     
     return audio
 
-def extract_mfcc_feature(audio, fs, mfcc_config, audio_transforms=None):
-    # n_mfcc=15
-    # n_fft=1024
-    # hop_length= 256
-    # max_samples = int(7.5 * 8000) # 7.5s
-    n_mfcc = mfcc_config.get("n_mfcc", 15)
-    n_fft = mfcc_config.get("n_fft", 1024)
-    hop_length = mfcc_config.get("hop_length", 256)
-    max_samples = mfcc_config.get("max_samples", int(7.5 * 8000))
-    if audio_transforms is not None:
-        try:
-            audio, fs = audio_transforms(audio, fs)
-        except:
-            audio = audio_transforms(samples=audio, sample_rate=fs)
-    audio = trim_and_pad(audio, max_samples)
-    mfcc_feature = librosa.feature.mfcc(y=audio, sr=fs, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
-    return mfcc_feature[None, ...].astype(np.float64)
 
 def segments(audio, fs, segment_size_t=0.05):
     audio_len = len(audio)
@@ -81,6 +64,27 @@ def remove_silent(audio, fs, segment_size_t, v2=False):
         return np.concatenate(high_energy_segments)
     except:
         return audio
+
+def extract_mfcc_feature(audio, fs, mfcc_config, audio_transforms=None):
+    # n_mfcc=15
+    # n_fft=1024
+    # hop_length= 256
+    # max_samples = int(7.5 * 8000) # 7.5s
+    do_remove_silent = mfcc_config.get("do_remove_silent", False)
+    if do_remove_silent:
+        audio = remove_silent(audio, fs, segment_size_t=0.025)
+    n_mfcc = mfcc_config.get("n_mfcc", 15)
+    n_fft = mfcc_config.get("n_fft", 1024)
+    hop_length = mfcc_config.get("hop_length", 256)
+    max_samples = mfcc_config.get("max_samples", int(10 * 8000))
+    if audio_transforms is not None:
+        try:
+            audio, fs = audio_transforms(audio, fs)
+        except:
+            audio = audio_transforms(samples=audio, sample_rate=fs)
+    audio = trim_and_pad(audio, max_samples)
+    mfcc_feature = librosa.feature.mfcc(y=audio, sr=fs, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
+    return mfcc_feature[None, ...].astype(np.float64)
 
 def extract_feature(audio, fs, segment_size_t=0.025, n_mfcc=26, n_fft=256, hop_length=40, audio_transfroms=None):
     # audio = remove_silent(audio, fs, segment_size_t)

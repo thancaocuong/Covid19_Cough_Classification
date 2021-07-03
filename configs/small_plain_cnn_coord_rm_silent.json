@@ -7,6 +7,7 @@
         "args": {
                  "num_classes": 1,
                  "inchannels": 1,
+                 "use_coord": true,
                  "pretrained": true}
     },
     "do_pseudo": false,
@@ -17,14 +18,14 @@
         "num_workers": 10
     },
     "dataset": {
-        "csv_path": "/home/hana/sonnh/Covid19_Cough_Classification/split_5_fold.csv",
+        "csv_path": "/media/sonnh/AICOVIDVN/aicv115m_public_train/metadata_train_challenge_kfold2.csv",
         "audio_folder": "/media/sonnh/AICOVIDVN/aicv115m_public_train/train_audio_files_8k/",
         "training_batch_size": 128,
         "validate_batch_size": 32,
         "num_workers": 10,
         "mfcc_config":
             {
-                "n_mfcc": 15, "n_fft": 1024, "hop_length": 256, "max_samples": 60000
+                "do_remove_silent": true, "n_mfcc": 15, "n_fft": 1024, "hop_length": 256, "max_samples": 80000
             }
     },
     "data_loader": {

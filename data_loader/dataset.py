@@ -58,7 +58,7 @@ class TestDataset:
         audio_path = item["file_path"]
         audio_path = os.path.join(self.audio_folder, audio_path)
         audio, fs = sf.read(audio_path, dtype="float32")
-        image = mfcc_feature(audio, fs, self.mfcc_config)
+        image = extract_mfcc_feature(audio, fs, self.mfcc_config)
         if self.image_transform is not None:
             image = self.image_transform(image=image)["image"]
 
