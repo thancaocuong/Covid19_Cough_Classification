@@ -28,6 +28,7 @@ class Trainer(BaseTrainer):
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_size))
+        self.log_step = int(len(data_loader) // 5)
         self.semi_epochs = 20
         self.do_pseudo = self.unlabeled_loader is not None
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)

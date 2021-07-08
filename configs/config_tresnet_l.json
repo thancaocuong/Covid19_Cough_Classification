@@ -1,10 +1,10 @@
 {
-    "name": "Covid19-regnetx_006",
+    "name": "Covid19-tresnet_m_448",
     "n_gpu": 1,
 
     "arch": {
         "type": "FinetuneEfficientNet",
-        "args": {"model_name": "regnetx_006",
+        "args": {"model_name": "tresnet_m_448",
                  "num_classes": 4,
                  "inchannels": 3,
                  "pretrained": true}
@@ -21,12 +21,12 @@
             }
     },
     "dataset": {
-        "csv_path": "/root/train_merge_study_kfold2.csv",
-        "images_dir": "/root/image",
-        "input_size": 320,
-        "training_batch_size": 128,
-        "validate_batch_size": 128,
-	"num_workers": 4
+        "csv_path": "/home/ubuntu/cuong_test/train_merge_study_kfold2.csv",
+        "images_dir": "/home/ubuntu/cuong_test/image",
+        "input_size": 448,
+        "training_batch_size": 32,
+        "validate_batch_size": 32,
+	"num_workers": 8
     },
     "data_loader": {
         "type": "MnistDataLoader",
