@@ -72,6 +72,8 @@ class Trainer(BaseTrainer):
         """
         self.model.train()
         self.train_metrics.reset()
+        targets = []
+        outputs = []
         for batch_idx, (data, target) in enumerate(self.data_loader):
             data, target = data.to(self.device), target.to(self.device)
 
@@ -80,11 +82,10 @@ class Trainer(BaseTrainer):
             loss = self.criterion(output, target)
             loss.backward()
             self.optimizer.step()
-
+            targets.append(target.detach().cpu())
+            outputs.append(output.detach().cpu())
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
-            for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target))
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
@@ -93,6 +94,10 @@ class Trainer(BaseTrainer):
                     loss.item()))
             if batch_idx == self.len_epoch:
                 break
+        targets = torch.cat(targets)
+        outputs = torch.cat(outputs)
+        for met in self.metric_ftns:
+            self.train_metrics.update(met.__name__, met(outputs, targets))
         log = self.train_metrics.result()
 
         if self.do_validation:
@@ -112,17 +117,22 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         self.valid_metrics.reset()
+        targets = []
+        outputs = []
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
 
                 output = self.model(data)
                 loss = self.criterion(output, target)
-
+                targets.append(target.detach().cpu())
+                outputs.append(output.detach().cpu())
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
-                for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, target))
+            targets = torch.cat(targets)
+            outputs = torch.cat(outputs)
+            for met in self.metric_ftns:
+                self.valid_metrics.update(met.__name__, met(outputs, targets))
         return self.valid_metrics.result()
 
     def _progress(self, batch_idx):

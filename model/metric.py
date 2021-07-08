@@ -2,9 +2,10 @@ import torch
 import sklearn
 def roc_auc(output, target):
     output = torch.sigmoid(output)
-    output = output.detach().cpu().numpy()
-    target = target.detach().cpu().numpy()
+    output = output.numpy()
+    target = target.numpy()
     return sklearn.metrics.roc_auc_score(target, output)
+
 def accuracy(output, target):
     with torch.no_grad():
         pred = torch.argmax(output, dim=1)
