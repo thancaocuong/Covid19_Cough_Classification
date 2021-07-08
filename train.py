@@ -94,7 +94,7 @@ def main(config, fold_idx):
     # setup data_loader instances
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
-        batch_size=config["dataset"]['training_batch_size'], 
+        batch_size=config["dataset"]['training_batch_size'],
         num_workers=config["dataset"]['num_workers'],
         shuffle=True,
         drop_last = True

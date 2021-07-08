@@ -3,6 +3,8 @@ import os
 import glob
 import pandas as pd
 import soundfile as sf
+from PIL import Image
+import numpy as np
 from .audio_preprocessing import mfcc_feature, extract_mfcc_feature
 from .mel_spec import audio2image, create_spectrogram
 
@@ -63,3 +65,25 @@ class TestDataset:
             image = self.image_transform(image=image)["image"]
 
         return torch.from_numpy(image), uuid
+
+class Covid19StudyDataset(torch.utils.data.Dataset):
+    def __init__(self, df, images_dir, transforms=None):
+        self.df = df
+        self.images_dir = images_dir
+        self.transforms = transforms
+
+    def __getitem__(self, idx):
+        items = self.df.iloc[idx]
+        image_id = str(items["id"]).split("_")[0] # remove image prefix
+        label = items["label"]
+        labels = torch.tensor(items[5:9].to_list())
+        image_path = os.path.join(self.images_dir, "{}.jpg".format(image_id))
+        image = Image.open(image_path)
+        image = np.stack([image, image, image])
+        image = Image.frombuffer("RGB", image.shape[1:], image)
+        if self.transforms is not None:
+            image = self.transforms(image)
+        return image, labels
+
+    def __len__(self):
+        return len(self.df)

@@ -10,8 +10,9 @@ class Trainer(BaseTrainer):
     Trainer class
     """
     def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
-                 data_loader, valid_data_loader=None, unlabeled_loader=None, lr_scheduler=None, len_epoch=None, fold_idx=0):
-        super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx)
+                 data_loader, valid_data_loader=None, unlabeled_loader=None,
+                 lr_scheduler=None, len_epoch=None, fold_idx=0, warmup=0):
+        super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx, warmup)
         self.config = config
         self.device = device
         self.data_loader = data_loader
