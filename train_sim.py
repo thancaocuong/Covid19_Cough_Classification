@@ -15,7 +15,7 @@ from parse_config import ConfigParser
 from trainer import Trainer
 from utils import prepare_device
 import torchvision
-
+from sklearn.utils import shuffle
 # fix random seeds for reproducibility
 SEED = 123
 torch.manual_seed(SEED)
@@ -31,17 +31,22 @@ def init_dataset(csv_path, fold_idx=1, images_dir="", input_size=512):
     """StratifiedKFold"""
     df_path = os.path.join(csv_path)
     df = pd.read_csv(df_path)
-    eval_df = df[df["fold"] == fold_idx]
-    train_df = df[df["fold"] != fold_idx]
-    train_transforms = torchvision.transforms.Compose([torchvision.transforms.Resize(input_size),
+    eval_df = df[df["kfold"] == fold_idx]
+    train_df = df[df["kfold"] != fold_idx]
+    train_df = shuffle(train_df)
+    eval_df = shuffle(eval_df)
+
+    train_transforms = torchvision.transforms.Compose([torchvision.transforms.ToPILImage(),
+                                                    torchvision.transforms.Resize(input_size),
                                                     torchvision.transforms.RandomHorizontalFlip(p=0.5),
-                                                    torchvision.transforms.RandomRotation(-45, 45)
+                                                    torchvision.transforms.RandomRotation(45),
                                                     torchvision.transforms.RandomCrop(input_size),
                                                     torchvision.transforms.ToTensor(),
                                                     torchvision.transforms.Normalize((0.485, 0.456, 0.406),
                                                                                      (0.229, 0.224, 0.225))])
 
-    eval_transforms = torchvision.transforms.Compose([torchvision.transforms.Resize(input_size),
+    eval_transforms = torchvision.transforms.Compose([torchvision.transforms.ToPILImage(),
+                                                    torchvision.transforms.Resize((input_size, input_size)),
                                                     torchvision.transforms.ToTensor(),
                                                     torchvision.transforms.Normalize((0.485, 0.456, 0.406),
                                                                                      (0.229, 0.224, 0.225))])
@@ -135,5 +140,5 @@ if __name__ == '__main__':
         CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size')
     ]
     config = ConfigParser.from_args(args, options)
-    for fold_idx in range(0, 5):
+    for fold_idx in range(1, 5):
         main(config, fold_idx)

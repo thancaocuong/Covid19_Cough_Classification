@@ -5,6 +5,7 @@ import pandas as pd
 import soundfile as sf
 from PIL import Image
 import numpy as np
+import cv2
 from .audio_preprocessing import mfcc_feature, extract_mfcc_feature
 from .mel_spec import audio2image, create_spectrogram
 
@@ -78,9 +79,7 @@ class Covid19StudyDataset(torch.utils.data.Dataset):
         label = items["label"]
         labels = torch.tensor(items[5:9].to_list())
         image_path = os.path.join(self.images_dir, "{}.jpg".format(image_id))
-        image = Image.open(image_path)
-        image = np.stack([image, image, image])
-        image = Image.frombuffer("RGB", image.shape[1:], image)
+        image = cv2.imread(image_path)
         if self.transforms is not None:
             image = self.transforms(image)
         return image, labels

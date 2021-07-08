@@ -5,7 +5,6 @@ def roc_auc(output, target):
     output = output.detach().cpu().numpy()
     target = target.detach().cpu().numpy()
     return sklearn.metrics.roc_auc_score(target, output)
-    # roc_auc = ROC_AUC(output, target)
 def accuracy(output, target):
     with torch.no_grad():
         pred = torch.argmax(output, dim=1)
