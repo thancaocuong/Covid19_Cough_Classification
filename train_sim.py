@@ -16,6 +16,11 @@ from trainer import Trainer
 from utils import prepare_device
 import torchvision
 from sklearn.utils import shuffle
+
+#aug
+import albumentations as A
+import cv2
+from albumentations.pytorch.transforms import ToTensorV2
 # fix random seeds for reproducibility
 SEED = 123
 torch.manual_seed(SEED)
@@ -36,20 +41,50 @@ def init_dataset(csv_path, fold_idx=1, images_dir="", input_size=512):
     train_df = shuffle(train_df)
     eval_df = shuffle(eval_df)
 
-    train_transforms = torchvision.transforms.Compose([torchvision.transforms.ToPILImage(),
-                                                    torchvision.transforms.Resize(input_size),
-                                                    torchvision.transforms.RandomHorizontalFlip(p=0.5),
-                                                    torchvision.transforms.RandomRotation(45),
-                                                    torchvision.transforms.RandomCrop(input_size),
-                                                    torchvision.transforms.ToTensor(),
-                                                    torchvision.transforms.Normalize((0.485, 0.456, 0.406),
-                                                                                     (0.229, 0.224, 0.225))])
+    # train_transforms = torchvision.transforms.Compose([torchvision.transforms.ToPILImage(),
+    #                                                 torchvision.transforms.Resize(input_size),
+    #                                                 torchvision.transforms.RandomHorizontalFlip(p=0.5),
+    #                                                 torchvision.transforms.RandomRotation(45),
+    #                                                 torchvision.transforms.RandomCrop(input_size),
+    #                                                 torchvision.transforms.ToTensor(),
+    #                                                 torchvision.transforms.Normalize((0.485, 0.456, 0.406),
+    #                                                                                  (0.229, 0.224, 0.225))])
 
-    eval_transforms = torchvision.transforms.Compose([torchvision.transforms.ToPILImage(),
-                                                    torchvision.transforms.Resize((input_size, input_size)),
-                                                    torchvision.transforms.ToTensor(),
-                                                    torchvision.transforms.Normalize((0.485, 0.456, 0.406),
-                                                                                     (0.229, 0.224, 0.225))])
+    # eval_transforms = torchvision.transforms.Compose([torchvision.transforms.ToPILImage(),
+    #                                                 torchvision.transforms.Resize((input_size, input_size)),
+    #                                                 torchvision.transforms.ToTensor(),
+    #                                                 torchvision.transforms.Normalize((0.485, 0.456, 0.406),
+    #                                                                                  (0.229, 0.224, 0.225))])
+
+
+    train_transforms = A.Compose([
+
+        A.Resize(input_size, input_size, cv2.INTER_AREA),
+        A.OneOf([
+            A.GaussNoise(var_limit=(150.0, 200.0), mean=0, p=0.5),
+        ], p = 0.5),
+
+        A.RandomGamma(gamma_limit=(120, 120), p=0.5),
+        A.RandomBrightnessContrast(contrast_limit=0, brightness_limit=0.2, brightness_by_max=True, p=0.5),
+        A.Rotate(limit=10, p=0.5),
+        A.HueSaturationValue(hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.5),
+        A.RandomBrightnessContrast(brightness_limit=(-0.1,0.1), contrast_limit=(-0.1, 0.1), p=0.5),
+        A.OneOf([
+            A.HorizontalFlip(p=1.0),
+            A.VerticalFlip(p=1.0),
+        ], p = 0.5),
+
+        A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], max_pixel_value=255.0, p=1.0),
+        ToTensorV2(p=1.0),
+    ], p=1.0)
+
+    eval_transforms = A.Compose([
+        A.Resize(input_size, input_size, cv2.INTER_AREA),
+        A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], max_pixel_value=255.0, p=1.0),
+        ToTensorV2(p=1.0),
+    ], p=1.0)
+
+
     # train_audio_transform = None
     train_dataset = Covid19StudyDataset(
             df=train_df,

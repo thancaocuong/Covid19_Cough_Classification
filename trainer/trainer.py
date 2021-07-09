@@ -4,6 +4,8 @@ from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 from tqdm import tqdm
+from torch.cuda import amp
+from trainer.mix import mixup
 
 class Trainer(BaseTrainer):
     """
@@ -16,6 +18,8 @@ class Trainer(BaseTrainer):
         self.config = config
         self.device = device
         self.data_loader = data_loader
+        self.fp16 = self.config['fp16']
+        self.scaler = amp.GradScaler(enabled=self.fp16)
         if len_epoch is None:
             # epoch-based training
             self.len_epoch = len(self.data_loader)
@@ -27,12 +31,12 @@ class Trainer(BaseTrainer):
         self.unlabeled_loader = unlabeled_loader
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
-        self.log_step = int(np.sqrt(data_loader.batch_size))
-        self.log_step = int(len(data_loader) // 5)
+        self.log_step = len(data_loader)
         self.semi_epochs = 20
         self.do_pseudo = self.unlabeled_loader is not None
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
+    
     def _semi_train_epoch(self):
         if self.do_pseudo:
             for epoch_idx in range(self.semi_epochs):
@@ -64,6 +68,7 @@ class Trainer(BaseTrainer):
             return log
         else:
             return False
+
     def _train_epoch(self, epoch):
         """
         Training logic for an epoch
@@ -75,16 +80,26 @@ class Trainer(BaseTrainer):
         self.train_metrics.reset()
         targets = []
         outputs = []
-        for batch_idx, (data, target) in enumerate(self.data_loader):
-            data, target = data.to(self.device), target.to(self.device)
 
-            self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
-            loss.backward()
-            self.optimizer.step()
-            targets.append(target.detach().cpu())
-            outputs.append(output.detach().cpu())
+        self.optimizer.zero_grad()
+        for batch_idx, (data, target) in enumerate(tqdm(self.data_loader)):
+            data, target = data.to(self.device), target.to(self.device)
+            with amp.autocast(enabled=self.fp16):
+                # if np.random.rand(1) >= 0.5:
+                mixed_images, labels_1, labels_2, lam = mixup(data, target)
+                output = self.model(mixed_images, fp16 = self.fp16)
+                loss = lam*self.criterion(output, labels_1) + (1 - lam)*self.criterion(output, labels_2)
+                # else:
+                #     output = self.model(data, fp16 = self.fp16)
+                #     loss = self.criterion(output, target)
+
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
+
+            targets.append(target.detach().cpu().float())
+            outputs.append(output.detach().cpu().float())
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
 

@@ -5,7 +5,7 @@ from base import BaseModel
 import timm
 from .coordconv import CoordConv1d, CoordConv2d, CoordConv3d
 
-
+from torch.cuda import amp
 
 
 class PlainCNN(BaseModel):
@@ -125,8 +125,8 @@ class FinetuneEfficientNet(BaseModel):
         super().__init__()
         self.backbone = timm.create_model(model_name, in_chans=inchannels, pretrained=pretrained)
         n_features = self.backbone.num_features
-        self.drop = nn.Dropout(0.5)
         self.fc1 = nn.Linear(n_features, 128)
+        self.drop = nn.Dropout(0.5)
         self.fc2 = nn.Linear(128, num_classes)
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
     def freeze(self):
@@ -135,17 +135,34 @@ class FinetuneEfficientNet(BaseModel):
         for param in self.backbone.parameters():
             param.require_grad = False
 
+        for module in self.backbone.modules():
+            if isinstance(module, nn.BatchNorm2d):
+                if hasattr(module, 'weight'):
+                    module.weight.requires_grad_(False)
+                if hasattr(module, 'bias'):
+                    module.bias.requires_grad_(False)
+                module.eval()
+
     def unfreeze(self):
         # pass
         for param in self.backbone.parameters():
             param.require_grad = True
 
-    def forward(self, x, train_state=False):
-        x = x.float()
-        feats = self.backbone.forward_features(x)
-        x = self.pool(feats).view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = self.drop(x)
+        for module in self.backbone.modules():
+            if isinstance(module, nn.BatchNorm2d):
+                if hasattr(module, 'weight'):
+                    module.weight.requires_grad_(True)
+                if hasattr(module, 'bias'):
+                    module.bias.requires_grad_(True)
+                module.train()
+
+    def forward(self, x, fp16=False):
+        with amp.autocast(enabled=fp16):
+            x = x.float()
+            feats = self.backbone.forward_features(x)
+            x = self.pool(feats).view(x.size(0), -1)
+            x = F.relu(self.fc1(x))
+            x = self.drop(x)
         return self.fc2(x)
         # return self.fc(feats)
 

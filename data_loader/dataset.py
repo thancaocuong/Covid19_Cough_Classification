@@ -6,8 +6,8 @@ import soundfile as sf
 from PIL import Image
 import numpy as np
 import cv2
-from .audio_preprocessing import mfcc_feature, extract_mfcc_feature
-from .mel_spec import audio2image, create_spectrogram
+# from .audio_preprocessing import mfcc_feature, extract_mfcc_feature
+# from .mel_spec import audio2image, create_spectrogram
 
 class CovidDataset(torch.utils.data.Dataset):
     def __init__(self, df, audio_folder, mfcc_config, audio_transforms=None, image_transform=None):
@@ -81,7 +81,8 @@ class Covid19StudyDataset(torch.utils.data.Dataset):
         image_path = os.path.join(self.images_dir, "{}.jpg".format(image_id))
         image = cv2.imread(image_path)
         if self.transforms is not None:
-            image = self.transforms(image)
+            # image = self.transforms(image)
+            image = self.transforms(image=image)["image"]
         return image, labels
 
     def __len__(self):
