@@ -9,7 +9,7 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from data_loader import CovidDataset, TestDataset
+from data_loader import CovidDataset, TestDataset, ImbalancedDatasetSampler
 from data_loader import AudioCompose, WhiteNoise, TimeShift, ChangePitch, ChangeSpeed
 from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion, AddGaussianSNR
 from parse_config import ConfigParser
@@ -96,7 +96,7 @@ def main(config, fold_idx):
         train_dataset,
         batch_size=config["dataset"]['training_batch_size'],
         num_workers=config["dataset"]['num_workers'],
-        shuffle=True,
+        sampler=ImbalancedDatasetSampler(train_dataset),
         drop_last = True
     )
     eval_loader = torch.utils.data.DataLoader(

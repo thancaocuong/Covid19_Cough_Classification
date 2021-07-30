@@ -19,6 +19,10 @@ class CovidDataset(torch.utils.data.Dataset):
         self.mfcc_config = mfcc_config
         if mfcc_config is None:
             self.mfcc_config = {}
+
+    def get_label(self, idx):
+        return self.df.iloc[idx]["assessment_result"].astype("float32")
+
     def __len__(self):
         return self.df.shape[0]
 
@@ -31,11 +35,11 @@ class CovidDataset(torch.utils.data.Dataset):
 
         label_encoded = torch.tensor(label, dtype=torch.float)
 
-        audio_path = os.path.join(self.audio_folder, item['file_path'])
+        audio_path = os.path.join(self.audio_folder, "%s.wav"%item['uuid'])
         audio, fs = sf.read(audio_path, dtype="float32")
         # # image = audio2image(audio, fs, self.audio_transforms)
         # image = mfcc_feature(audio, fs, self.audio_transforms)
-        image = extract_mfcc_feature(audio, fs, self.mfcc_config, self.audio_transforms)
+        image = extract_mfcc_feature(audio, fs, self.mfcc_config, self.audio_transforms, for_test=False)
         # image = create_spectrogram(audio, fs, self.audio_transforms)
         if self.image_transform is not None:
             image = self.image_transform(image)
@@ -61,7 +65,7 @@ class TestDataset:
         audio_path = item["file_path"]
         audio_path = os.path.join(self.audio_folder, audio_path)
         audio, fs = sf.read(audio_path, dtype="float32")
-        image = extract_mfcc_feature(audio, fs, self.mfcc_config)
+        image = extract_mfcc_feature(audio, fs, self.mfcc_config, for_test=True)
         if self.image_transform is not None:
             image = self.image_transform(image=image)["image"]
 
