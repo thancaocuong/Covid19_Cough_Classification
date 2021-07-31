@@ -9,7 +9,7 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config, fold_idx=0):
+    def __init__(self, model, criterion, metric_ftns, optimizer, config, fold_idx=0, warmup=0):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
@@ -48,6 +48,7 @@ class BaseTrainer:
             self._resume_checkpoint(config.resume)
         if not os.path.exists(config.log_dir):
             os.makedirs(config.log_dir)
+        self.warmup = warmup
     @abstractmethod
     def _semi_train_epoch(self):
         raise NotImplementedError
@@ -67,7 +68,7 @@ class BaseTrainer:
         not_improved_count = 0
         best_epoch = 1
         for epoch in range(self.start_epoch, self.epochs + 1):
-            if epoch < self.epochs // 2:
+            if epoch < self.warmup:
                 self.model.freeze()
             else:
                 self.model.unfreeze()

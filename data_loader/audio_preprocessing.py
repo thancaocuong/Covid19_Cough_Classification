@@ -65,18 +65,24 @@ def remove_silent(audio, fs, segment_size_t, v2=False):
     except:
         return audio
 
-def extract_mfcc_feature(audio, fs, mfcc_config, audio_transforms=None):
+def extract_mfcc_feature(audio, fs, mfcc_config, audio_transforms=None, for_test=False):
     # n_mfcc=15
     # n_fft=1024
     # hop_length= 256
     # max_samples = int(7.5 * 8000) # 7.5s
-    do_remove_silent = mfcc_config.get("do_remove_silent", False)
-    if do_remove_silent:
-        audio = remove_silent(audio, fs, segment_size_t=0.025)
+
+    # do_remove_silent = mfcc_config.get("do_remove_silent", False)
     n_mfcc = mfcc_config.get("n_mfcc", 15)
     n_fft = mfcc_config.get("n_fft", 1024)
     hop_length = mfcc_config.get("hop_length", 256)
-    max_samples = mfcc_config.get("max_samples", int(10 * 8000))
+    max_duration = mfcc_config.get("max_duration", 15)
+    target_sr = mfcc_config.get("target_sr", 48000)
+    max_samples = int(max_duration * target_sr)
+    if for_test:
+        # if it's the test set -> do remove silent and  resample
+        audio = remove_silent(audio, fs, segment_size_t=0.025)
+        audio = librosa.resample(audio, fs, target_sr)
+        fs = target_sr
     if audio_transforms is not None:
         try:
             audio, fs = audio_transforms(audio, fs)

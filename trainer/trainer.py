@@ -10,8 +10,9 @@ class Trainer(BaseTrainer):
     Trainer class
     """
     def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
-                 data_loader, valid_data_loader=None, unlabeled_loader=None, lr_scheduler=None, len_epoch=None, fold_idx=0):
-        super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx)
+                 data_loader, valid_data_loader=None, unlabeled_loader=None,
+                 lr_scheduler=None, len_epoch=None, fold_idx=0, warmup=0):
+        super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx, warmup)
         self.config = config
         self.device = device
         self.data_loader = data_loader
@@ -27,6 +28,7 @@ class Trainer(BaseTrainer):
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_size))
+        self.log_step = int(len(data_loader) // 5)
         self.semi_epochs = 20
         self.do_pseudo = self.unlabeled_loader is not None
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
@@ -71,6 +73,8 @@ class Trainer(BaseTrainer):
         """
         self.model.train()
         self.train_metrics.reset()
+        targets = []
+        outputs = []
         for batch_idx, (data, target) in enumerate(self.data_loader):
             data, target = data.to(self.device), target.to(self.device)
 
@@ -79,11 +83,10 @@ class Trainer(BaseTrainer):
             loss = self.criterion(output, target)
             loss.backward()
             self.optimizer.step()
-
+            targets.append(target.detach().cpu())
+            outputs.append(output.detach().cpu())
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
-            for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target))
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
@@ -92,6 +95,10 @@ class Trainer(BaseTrainer):
                     loss.item()))
             if batch_idx == self.len_epoch:
                 break
+        targets = torch.cat(targets)
+        outputs = torch.cat(outputs)
+        for met in self.metric_ftns:
+            self.train_metrics.update(met.__name__, met(outputs, targets))
         log = self.train_metrics.result()
 
         if self.do_validation:
@@ -111,17 +118,22 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         self.valid_metrics.reset()
+        targets = []
+        outputs = []
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
 
                 output = self.model(data)
                 loss = self.criterion(output, target)
-
+                targets.append(target.detach().cpu())
+                outputs.append(output.detach().cpu())
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
-                for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, target))
+            targets = torch.cat(targets)
+            outputs = torch.cat(outputs)
+            for met in self.metric_ftns:
+                self.valid_metrics.update(met.__name__, met(outputs, targets))
         return self.valid_metrics.result()
 
     def _progress(self, batch_idx):
