@@ -129,7 +129,6 @@ class FinetuneEfficientNet(BaseModel):
         self.fc1 = nn.Linear(n_features, 128)
         self.fc2 = nn.Linear(128, num_classes)
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
-    
     def freeze(self):
         # pass
         # print("freeze feature_extractor")
