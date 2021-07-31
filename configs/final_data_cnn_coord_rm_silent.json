@@ -13,8 +13,8 @@
     },
     "do_pseudo": false,
     "unlabeled_dataset": {
-        "csv_path": "/home/ubuntu/cuong_test/AICOVIDVN/dataset/aicv115m_public_test/metadata_public_test.csv",
-        "audio_folder": "/home/ubuntu/cuong_test/AICOVIDVN/dataset/aicv115m_public_test/public_test_audio_files_8k/",
+        "csv_path": "/home/hana/sonnh/data/AICovidVN/aicv115m_public_train_full/aicv115m_final_public_test/public_test_sample_submission.csv",
+        "audio_folder": "/home/hana/sonnh/data/AICovidVN/aicv115m_public_train_full/aicv115m_final_public_test/public_test_audio_files/",
         "training_batch_size": 16,
         "num_workers": 10
     },

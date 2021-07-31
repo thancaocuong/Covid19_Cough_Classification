@@ -62,7 +62,8 @@ class TestDataset:
     def __getitem__(self, idx):
         item = self.df.iloc[idx]
         uuid = item["uuid"]
-        audio_path = item["file_path"]
+        # audio_path = item["file_path"]
+        audio_path = "%s.wav"%uuid
         audio_path = os.path.join(self.audio_folder, audio_path)
         audio, fs = sf.read(audio_path, dtype="float32")
         image = extract_mfcc_feature(audio, fs, self.mfcc_config, for_test=True)
