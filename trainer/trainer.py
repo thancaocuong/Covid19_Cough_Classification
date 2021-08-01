@@ -4,17 +4,30 @@ from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 from tqdm import tqdm
+from .ema import  ModelEMA
+
+from torch.cuda import amp
+# from trainer.mix import mixup
 
 class Trainer(BaseTrainer):
     """
     Trainer class
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
+    def __init__(self, model, train_criterion, val_criterion, metric_ftns, optimizer, config, device,
                  data_loader, valid_data_loader=None, unlabeled_loader=None,
                  lr_scheduler=None, len_epoch=None, fold_idx=0, warmup=0):
-        super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx, warmup)
+        super().__init__(model, train_criterion, val_criterion, metric_ftns, optimizer, config, fold_idx, warmup)
         self.config = config
         self.device = device
+
+        self.fp16 = self.config['fp16']
+        self.scaler = amp.GradScaler(enabled=self.fp16)
+
+        if self.config['ema']:
+            self.ema =  ModelEMA(self.model)
+        else:
+            self.ema = None
+
         self.data_loader = data_loader
         if len_epoch is None:
             # epoch-based training
@@ -48,7 +61,7 @@ class Trainer(BaseTrainer):
                         output_unlabeled[output_unlabeled<0.5] = 0.0
                     self.model.train()
                     output = self.model(data)
-                    loss = self.criterion(output, output_unlabeled)
+                    loss = self.train_criterion(output, output_unlabeled)
                     loss.backward()
                     self.optimizer.step()
                     if batch_idx % self.log_step == 0:
@@ -75,14 +88,21 @@ class Trainer(BaseTrainer):
         self.train_metrics.reset()
         targets = []
         outputs = []
-        for batch_idx, (data, target) in enumerate(self.data_loader):
+        self.optimizer.zero_grad()
+        for batch_idx, (data, target) in enumerate(tqdm(self.data_loader)):
             data, target = data.to(self.device), target.to(self.device)
+            with amp.autocast(enabled=self.fp16):
 
-            self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
-            loss.backward()
-            self.optimizer.step()
+                self.optimizer.zero_grad()
+                output = self.model(data, fp16 = self.fp16)
+                loss = self.train_criterion(output, target)
+                # loss.backward()
+                # self.optimizer.step()
+
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+
             targets.append(target.detach().cpu())
             outputs.append(output.detach().cpu())
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
@@ -95,6 +115,14 @@ class Trainer(BaseTrainer):
                     loss.item()))
             if batch_idx == self.len_epoch:
                 break
+
+
+            if self.ema:
+                self.ema.update(self.model)
+
+        if self.ema:
+            self.ema.update_attr(self.model, include=[])
+
         targets = torch.cat(targets)
         outputs = torch.cat(outputs)
         for met in self.metric_ftns:
@@ -116,16 +144,21 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        self.model.eval()
+        if self.ema is not None:
+            self.model_eval = self.ema.ema
+        else:
+            self.model_eval  = self.model
+
+        self.model_eval.eval()
         self.valid_metrics.reset()
         targets = []
         outputs = []
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(self.valid_data_loader):
+            for batch_idx, (data, target) in enumerate(tqdm(self.valid_data_loader)):
                 data, target = data.to(self.device), target.to(self.device)
-
-                output = self.model(data)
-                loss = self.criterion(output, target)
+                target = target.to(dtype=torch.long)
+                output = self.model_eval(data)
+                loss = self.val_criterion(output, target)
                 targets.append(target.detach().cpu())
                 outputs.append(output.detach().cpu())
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
