@@ -1,7 +1,7 @@
 import torch
 import sklearn
 def roc_auc(output, target):
-    output = torch.sigmoid(output)
+    output = torch.sigmoid(output.float())
     output = output.numpy()
     target = target.numpy()
     return sklearn.metrics.roc_auc_score(target, output)

@@ -5,6 +5,9 @@ from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 from tqdm import tqdm
 
+from torch.cuda import amp
+# from trainer.mix import mixup
+
 class Trainer(BaseTrainer):
     """
     Trainer class
@@ -15,6 +18,12 @@ class Trainer(BaseTrainer):
         super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx, warmup)
         self.config = config
         self.device = device
+
+        self.fp16 = self.config['fp16']
+        print('self.fp16 ', self.fp16)
+        self.scaler = amp.GradScaler(enabled=self.fp16)
+
+
         self.data_loader = data_loader
         if len_epoch is None:
             # epoch-based training
@@ -75,26 +84,35 @@ class Trainer(BaseTrainer):
         self.train_metrics.reset()
         targets = []
         outputs = []
-        for batch_idx, (data, target) in enumerate(self.data_loader):
+        self.optimizer.zero_grad()
+        for batch_idx, (data, target) in enumerate(tqdm(self.data_loader)):
             data, target = data.to(self.device), target.to(self.device)
+            with amp.autocast(enabled=self.fp16):
 
-            self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
-            loss.backward()
-            self.optimizer.step()
-            targets.append(target.detach().cpu())
-            outputs.append(output.detach().cpu())
-            self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
-            self.train_metrics.update('loss', loss.item())
+                self.optimizer.zero_grad()
+                output = self.model(data, fp16 = self.fp16)
+                loss = self.criterion(output, target)
+                # loss.backward()
+                # self.optimizer.step()
 
-            if batch_idx % self.log_step == 0:
-                self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
-                    epoch,
-                    self._progress(batch_idx),
-                    loss.item()))
-            if batch_idx == self.len_epoch:
-                break
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+
+                targets.append(target.detach().cpu())
+                outputs.append(output.detach().cpu())
+                self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
+                self.train_metrics.update('loss', loss.item())
+
+                if batch_idx % self.log_step == 0:
+                    self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
+                        epoch,
+                        self._progress(batch_idx),
+                        loss.item()))
+                if batch_idx == self.len_epoch:
+                    break
+
+
         targets = torch.cat(targets)
         outputs = torch.cat(outputs)
         for met in self.metric_ftns:
@@ -121,7 +139,7 @@ class Trainer(BaseTrainer):
         targets = []
         outputs = []
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(self.valid_data_loader):
+            for batch_idx, (data, target) in enumerate(tqdm(self.valid_data_loader)):
                 data, target = data.to(self.device), target.to(self.device)
 
                 output = self.model(data)
