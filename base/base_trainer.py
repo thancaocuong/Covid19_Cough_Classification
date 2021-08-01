@@ -136,7 +136,7 @@ class BaseTrainer:
         state = {
             'arch': arch,
             'epoch': epoch,
-            'state_dict': self.model.state_dict(),
+            'state_dict': self.model.module.state_dict() if isinstance(self.model, nn.DataParallel) else self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'monitor_best': self.mnt_best,
             'config': self.config
