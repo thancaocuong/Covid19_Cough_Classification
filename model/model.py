@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from base import BaseModel
 import timm
 from .coordconv import CoordConv1d, CoordConv2d, CoordConv3d
-
-
+from .vit import *
+from torch.cuda import amp
 
 
 class PlainCNN(BaseModel):
@@ -120,7 +120,7 @@ class PlainCNNSmall(BaseModel):
         x = self.fc3(x)
         return x
 
-class FinetuneEfficientNet(BaseModel):
+class TimmBackbone(BaseModel):
     def __init__(self, model_name, inchannels=3, num_classes=1, pretrained=True):
         super().__init__()
         self.backbone = timm.create_model(model_name, in_chans=inchannels, pretrained=pretrained)
@@ -140,41 +140,15 @@ class FinetuneEfficientNet(BaseModel):
         for param in self.backbone.parameters():
             param.require_grad = True
 
-    def forward(self, x, train_state=False):
-        x = x.float()
-        feats = self.backbone.forward_features(x)
-        x = self.pool(feats).view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = self.drop(x)
-        return self.fc2(x)
-        # return self.fc(feats)
-
-class Covid19(BaseModel):
-    def __init__(self, model_name, inchannels=3, num_classes=1, pretrained=True):
-        super().__init__()
-        backbone = timm.create_model(model_name, in_chans=inchannels, pretrained=True)
-        n_features = backbone.fc.in_features
-        self.backbone = nn.Sequential(*backbone.children())[:-2]
-        self.backbone.eval()
-        # self.classifier = nn.Linear(n_features, 1)
-        self.drop = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(n_features, 50)
-        self.fc2 = nn.Linear(50, num_classes)
-        self.pool = nn.AdaptiveAvgPool2d((1, 1))
-    def forward_features(self, x):
-        with torch.no_grad():
-            x = self.backbone(x)
+    def forward(self, x, fp16=False):
+        with amp.autocast(enabled=fp16):
+            x = x.float()
+            feats = self.backbone.forward_features(x)
+            x = self.pool(feats).view(x.size(0), -1)
+            x = F.relu(self.fc1(x))
+            x = self.drop(x)
+            x = self.fc2(x)
         return x
-
-    def forward(self, x, train_state=False):
-        x = x.float()
-        feats = self.forward_features(x)
-        x = self.pool(feats).view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = self.drop(x)
-        return self.fc2(x)
-        # x = self.classifier(x)
-        # return x
 
 class TropicModel(BaseModel):
     def __init__(self, model_name, drop_rate=0.2, inchannels=3, num_classes=1, coord=1, pretrained=True):
@@ -188,3 +162,47 @@ class TropicModel(BaseModel):
         if self.coord: x = torch.cat((x,coord),dim=1)
         x = self.do(x)
         return self.trunk(x)
+
+
+class VitModel(BaseModel):
+    def __init__(self, backbone, out_dim, embedding_size=512, 
+                 loss=False, pretrained=True):
+        super(VitModel, self).__init__()
+        self.backbone_name = backbone
+        self.loss = loss
+        self.embedding_size = embedding_size
+        self.out_dim = out_dim
+        
+        self.backbone = Backbone(backbone, pretrained=pretrained)
+        
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+
+        self.neck = nn.Sequential(
+                nn.Dropout(0.3),
+                nn.Linear(self.backbone.out_features, self.embedding_size, bias=True),
+                nn.BatchNorm1d(self.embedding_size),
+                torch.nn.PReLU()
+            )
+            
+        self.head = nn.Linear(self.embedding_size, out_dim)
+        
+    def forward(self, melspec, get_embeddings=False, get_attentions=False, fp16 = False):
+        with amp.autocast(enabled=fp16):
+            # x = input_dict['spect']
+            x = melspec
+            x = x.unsqueeze(1)
+            x = x.expand(-1, 3, -1, -1)
+
+            x = self.backbone(x)
+            
+            # if 'vit' not in backbone:
+            #     x = self.global_pool(x)
+            #     x = x[:,:,0,0]
+            # if 'vit_deit_base_distilled_patch16_384' == backbone:
+            x = x[0] + x[1]
+            
+            x = self.neck(x)
+
+            logits = self.head(x)
+
+        return logits

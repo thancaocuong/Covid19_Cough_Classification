@@ -9,12 +9,13 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config, fold_idx=0, warmup=0):
+    def __init__(self, model, train_criterion, val_criterion, metric_ftns, optimizer, config, fold_idx=0, warmup=0):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
         self.model = model
-        self.criterion = criterion
+        self.train_criterion = train_criterion
+        self.val_criterion = val_criterion
         self.metric_ftns = metric_ftns
         self.optimizer = optimizer
 
@@ -22,6 +23,8 @@ class BaseTrainer:
         self.epochs = cfg_trainer['epochs']
         self.save_period = cfg_trainer['save_period']
         self.monitor = cfg_trainer.get('monitor', 'off')
+
+        self.ema = None
 
         # configuration to monitor model performance and save best
         if self.monitor == 'off':
@@ -133,10 +136,16 @@ class BaseTrainer:
         :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
         """
         arch = type(self.model).__name__
+
+        if self.ema is not None:
+            state_dict = self.ema.ema.state_dict()
+        else:
+            state_dict = self.model.module.state_dict() if isinstance(self.model, nn.DataParallel) else self.model.state_dict()
+
         state = {
             'arch': arch,
             'epoch': epoch,
-            'state_dict': self.model.module.state_dict() if isinstance(self.model, nn.DataParallel) else self.model.state_dict(),
+            'state_dict': state_dict,
             'optimizer': self.optimizer.state_dict(),
             'monitor_best': self.mnt_best,
             'config': self.config

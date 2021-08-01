@@ -9,7 +9,7 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from data_loader import CovidDataset, TestDataset, ImbalancedDatasetSampler
+from data_loader import CovidDataset, TestDataset, ImbalancedDatasetSampler, VitDataset
 from data_loader import AudioCompose, WhiteNoise, TimeShift, ChangePitch, ChangeSpeed
 from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion, AddGaussianSNR
 from parse_config import ConfigParser
@@ -61,7 +61,7 @@ def init_dataset(csv_path, mfcc_config=None, fold_idx=1, audio_folder=""):
                     PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
                     Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
                     PolarityInversion(p=0.5),
-                    Gain()
+                    Gain(min_gain_in_db=-15,max_gain_in_db=15,p=0.3)
                 ], p=1.0)
     # train_audio_transform = None
     train_dataset = CovidDataset(
@@ -79,6 +79,20 @@ def init_dataset(csv_path, mfcc_config=None, fold_idx=1, audio_folder=""):
                                 audio_transforms=None,
                                 image_transform=None,
                             )
+
+
+    # train_dataset = VitDataset(
+    #     df=train_df[:200],
+    #     audio_folder=audio_folder,
+    #     train_aug=train_audio_transform,
+    # )
+
+    # validation_dataset = VitDataset(
+
+    #     df=eval_df[:200],
+    #     audio_folder=audio_folder,
+    #     train_aug=None,
+    # )
     return train_dataset, validation_dataset
 
 def init_unlabeled_dataset(csv_path, audio_folder="", mfcc_config=None):
@@ -119,7 +133,7 @@ def main(config, fold_idx):
                     )
     # build model architecture, then print to console
     model = config.init_obj('arch', module_arch)
-    logger.info(model)
+    # logger.info(model)
 
     # prepare for (multi-device) GPU training
     device, device_ids = prepare_device(config['n_gpu'])
@@ -128,7 +142,8 @@ def main(config, fold_idx):
         model = torch.nn.DataParallel(model, device_ids=device_ids)
 
     # get function handles of loss and metrics
-    criterion = getattr(module_loss, config['loss'])
+    train_criterion = getattr(module_loss, config['train_loss'])
+    val_criterion = getattr(module_loss, config['val_loss'])
     metrics = [getattr(module_metric, met) for met in config['metrics']]
 
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
@@ -136,7 +151,7 @@ def main(config, fold_idx):
     optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
     lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
 
-    trainer = Trainer(model, criterion, metrics, optimizer,
+    trainer = Trainer(model, train_criterion, val_criterion, metrics, optimizer,
                       config=config,
                       device=device,
                       data_loader=train_loader,
