@@ -3,7 +3,7 @@ import os
 from abc import abstractmethod
 from numpy import inf
 from logger import TensorboardWriter
-
+from torch import nn
 
 class BaseTrainer:
     """
@@ -69,9 +69,15 @@ class BaseTrainer:
         best_epoch = 1
         for epoch in range(self.start_epoch, self.epochs + 1):
             if epoch < self.warmup:
-                self.model.freeze()
+                if isinstance(self.model, nn.DataParallel):
+                    self.model.module.freeze()
+                else:
+                    self.model.freeze()
             else:
-                self.model.unfreeze()
+                if isinstance(self.model, nn.DataParallel):
+                    self.model.module.unfreeze()
+                else:
+                    self.model.unfreeze()
             result = self._train_epoch(epoch)
 
             # save logged informations into log dict
