@@ -23,6 +23,7 @@ class BaseTrainer:
         self.epochs = cfg_trainer['epochs']
         self.save_period = cfg_trainer['save_period']
         self.monitor = cfg_trainer.get('monitor', 'off')
+        self.only_save_best = cfg_trainer.get("only_save_best", True)
 
         self.ema = None
 
@@ -151,7 +152,11 @@ class BaseTrainer:
             'config': self.config
         }
         # filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
-        filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}.pth'.format(self.fold_idx))
+        if self.only_save_best:
+            filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}.pth'.format(self.fold_idx))
+        else:
+            filename = os.path.join(self.checkpoint_dir, 'checkpoint_{}_fold{}.pth'.format(epoch, self.fold_idx))
+            
         if is_semi:
             filename = os.path.join(self.checkpoint_dir, 'pseudo_checkpoint_fold{}.pth'.format(self.fold_idx))
         torch.save(state, filename)
