@@ -17,3 +17,18 @@ def bce_with_logits_loss(output, target):
     output = output.view(-1).float().cuda()
     target = target.view(-1).float().cuda()
     return F.binary_cross_entropy_with_logits(output, target)
+
+def masked_bce_with_logits_loss(output, target):
+    output = output.view(-1).float().cuda()
+    # print(output)
+    # print(target)
+    target = target.view(-1).float().cuda()
+    bce_loss = F.binary_cross_entropy_with_logits(output, target, reduce=False)
+    # print(bce_loss)
+    max_item = bce_loss.max().item()
+    # print(0.9*max_item)
+    index = bce_loss > 0.95*max_item
+    index[target==1] = False
+    bce_loss[index] = 0.0
+    # print(bce_loss)
+    return bce_loss.mean()

@@ -6,11 +6,12 @@ import soundfile as sf
 from PIL import Image
 import numpy as np
 import cv2
+import librosa
 from .audio_preprocessing import mfcc_feature, extract_mfcc_feature
 from .mel_spec import audio2image, create_spectrogram
 
 class CovidDataset(torch.utils.data.Dataset):
-    def __init__(self, df, audio_folder, mfcc_config, audio_transforms=None, image_transform=None):
+    def __init__(self, df, audio_folder, mfcc_config, for_test=False,  audio_transforms=None, image_transform=None):
         super().__init__()
         self.df = df
         self.audio_folder = audio_folder
@@ -19,6 +20,7 @@ class CovidDataset(torch.utils.data.Dataset):
         self.mfcc_config = mfcc_config
         if mfcc_config is None:
             self.mfcc_config = {}
+        self.for_test = for_test
 
     def get_label(self, idx):
         return self.df.iloc[idx]["assessment_result"].astype("float32")
@@ -36,10 +38,11 @@ class CovidDataset(torch.utils.data.Dataset):
         label_encoded = torch.tensor(label, dtype=torch.float)
 
         audio_path = os.path.join(self.audio_folder, "%s.wav"%item['uuid'])
-        audio, fs = sf.read(audio_path, dtype="float32")
+        audio, fs = librosa.load(audio_path)
+        # audio, fs = sf.read(audio_path, dtype="float32")
         # # image = audio2image(audio, fs, self.audio_transforms)
         # image = mfcc_feature(audio, fs, self.audio_transforms)
-        image = extract_mfcc_feature(audio, fs, self.mfcc_config, self.audio_transforms, for_test=False)
+        image = extract_mfcc_feature(audio, fs, self.mfcc_config, self.audio_transforms, for_test=self.for_test)
         # image = create_spectrogram(audio, fs, self.audio_transforms)
         if self.image_transform is not None:
             image = self.image_transform(image)
@@ -65,7 +68,8 @@ class TestDataset:
         # audio_path = item["file_path"]
         audio_path = "%s.wav"%uuid
         audio_path = os.path.join(self.audio_folder, audio_path)
-        audio, fs = sf.read(audio_path, dtype="float32")
+        # audio, fs = sf.read(audio_path, dtype="float32")
+        audio, fs = librosa.load(audio_path)
         image = extract_mfcc_feature(audio, fs, self.mfcc_config, for_test=True)
         if self.image_transform is not None:
             image = self.image_transform(image=image)["image"]

@@ -44,6 +44,37 @@ def trim_and_pad(audio, max_samples):
     
     return audio
 
+def padding_repeat(audio, max_samples):
+    audio_length = audio.shape[0]
+    if audio_length > max_samples:
+        # trim long_data
+        trim_length = audio_length - max_samples
+        new_audio = audio[int(trim_length//2):int(max_samples+trim_length//2)]
+    else:
+        # n_repeats = max_samples // len(audio)
+        # epsilon = max_samples % len(audio)
+        n_repeats = int(max_samples/audio_length)
+        new_audio = np.empty(max_samples)
+        new_audio[:audio_length*n_repeats] = np.tile(audio, n_repeats)
+        remain = max_samples - n_repeats*audio_length
+        new_audio[audio_length*n_repeats:] = audio[:remain]
+    
+    return new_audio
+
+def random_crop(audio, max_length):
+    len_y = audio.shape[0]
+    if len_y < max_length:
+        # audio = padding_repeat(audio, max_length)
+        new_y = np.zeros(max_length, dtype=audio.dtype)
+        start = np.random.randint(max_length - len_y)
+        new_y[start:start + len_y] = audio
+        audio = new_y.astype(np.float32)
+    elif len_y > max_length:
+        start = np.random.randint(len_y - max_length)
+        audio = audio[start:start + max_length].astype(np.float32)
+    else:
+        audio = audio.astype(np.float32)
+    return audio
 
 def segments(audio, fs, segment_size_t=0.05):
     audio_len = len(audio)
@@ -65,6 +96,11 @@ def remove_silent(audio, fs, segment_size_t, v2=False):
     except:
         return audio
 
+def scale_minmax(X, min=0.0, max=1.0):
+    X_std = (X - X.min()) / (X.max() - X.min())
+    X_scaled = X_std * (max - min) + min
+    return X_scaled
+
 def extract_mfcc_feature(audio, fs, mfcc_config, audio_transforms=None, for_test=False):
     # n_mfcc=15
     # n_fft=1024
@@ -72,24 +108,38 @@ def extract_mfcc_feature(audio, fs, mfcc_config, audio_transforms=None, for_test
     # max_samples = int(7.5 * 8000) # 7.5s
 
     # do_remove_silent = mfcc_config.get("do_remove_silent", False)
-    n_mfcc = mfcc_config.get("n_mfcc", 15)
+    n_mfcc = mfcc_config.get("n_mfcc", 39)
     n_fft = mfcc_config.get("n_fft", 1024)
     hop_length = mfcc_config.get("hop_length", 256)
-    max_duration = mfcc_config.get("max_duration", 15)
-    target_sr = mfcc_config.get("target_sr", 48000)
+    max_duration = mfcc_config.get("max_duration", 10)
+    target_sr = mfcc_config.get("target_sr", 22050)
     max_samples = int(max_duration * target_sr)
-    if for_test:
-        # if it's the test set -> do remove silent and  resample
-        audio = remove_silent(audio, fs, segment_size_t=0.025)
-        audio = librosa.resample(audio, fs, target_sr)
-        fs = target_sr
+    # if for_test:
+    #     # if it's the test set -> do remove silent and  resample
+    #     audio = remove_silent(audio, fs, segment_size_t=0.025)
+    #     audio = librosa.resample(audio, fs, target_sr)
+    #     fs = target_sr
     if audio_transforms is not None:
         try:
-            audio, fs = audio_transforms(audio, fs)
-        except:
             audio = audio_transforms(samples=audio, sample_rate=fs)
-    audio = trim_and_pad(audio, max_samples)
+        except:
+            audio, fs = audio_transforms(audio, fs)
+    # 
+    if for_test:
+        audio = padding_repeat(audio, max_samples)
+    else:
+        audio = random_crop(audio, max_samples)
+    
     mfcc_feature = librosa.feature.mfcc(y=audio, sr=fs, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
+    if mfcc_config.get("use_derivative", False):
+        mfcc_delta = librosa.feature.delta(mfcc_feature)
+        mfcc_delta2 = librosa.feature.delta(mfcc_feature, order=2)
+        mfcc_feature = np.concatenate([mfcc_feature, mfcc_delta, mfcc_delta2])
+    if mfcc_config.get("normalize", False):
+        mfcc_feature = scale_minmax(mfcc_feature, 0, 255).astype(np.uint8)
+        mfcc_feature = np.flip(mfcc_feature, axis=0) # put low frequencies at the bottom in image
+        mfcc_feature = 255-mfcc_feature # invert. make black==more energy
+        mfcc_feature = mfcc_feature / 255.0
     return mfcc_feature[None, ...].astype(np.float64)
 
 def extract_feature(audio, fs, segment_size_t=0.025, n_mfcc=26, n_fft=256, hop_length=40, audio_transfroms=None):

@@ -50,13 +50,15 @@ def init_dataset(csv_path, mfcc_config=None, fold_idx=1, audio_folder=""):
     df_path = os.path.join(csv_path)
     df = pd.read_csv(df_path)
     eval_df = df[df["fold"] == fold_idx]
+    # eval only on non-augmented data
+    eval_df = eval_df[eval_df["is_augmented"] == 0]
     train_df = df[df["fold"] != fold_idx]
     # train_audio_transform = AudioCompose([WhiteNoise(0.005),
     #                                       TimeShift(),
     #                                       ChangeSpeed()])
     train_audio_transform = OneOf([
                     # AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-                    AddGaussianSNR(min_SNR=0.1, max_SNR=0.56, p=0.5), # new
+                    AddGaussianSNR(p=0.5), # new
                     TimeStretch(min_rate=0.9, max_rate=1.2, p=0.5),
                     PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
                     Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
@@ -76,6 +78,7 @@ def init_dataset(csv_path, mfcc_config=None, fold_idx=1, audio_folder=""):
                                 df=eval_df,
                                 mfcc_config=mfcc_config,
                                 audio_folder=audio_folder,
+                                for_test=True,
                                 audio_transforms=None,
                                 image_transform=None,
                             )
@@ -96,7 +99,8 @@ def main(config, fold_idx):
         train_dataset,
         batch_size=config["dataset"]['training_batch_size'],
         num_workers=config["dataset"]['num_workers'],
-        sampler=ImbalancedDatasetSampler(train_dataset),
+        shuffle=True,
+        # sampler=ImbalancedDatasetSampler(train_dataset),
         drop_last = True
     )
     eval_loader = torch.utils.data.DataLoader(
