@@ -14,7 +14,7 @@ class Trainer(BaseTrainer):
     Trainer class
     """
     def __init__(self, model, train_criterion, val_criterion, metric_ftns, optimizer, config, device,
-                 data_loader, valid_data_loader=None, unlabeled_loader=None,
+                 data_loader, valid_data_loader=None, valid_data_loader_warmup = None, unlabeled_loader=None,
                  lr_scheduler=None, len_epoch=None, fold_idx=0, warmup=0):
         super().__init__(model, train_criterion, val_criterion, metric_ftns, optimizer, config, fold_idx, warmup)
         self.config = config
@@ -37,6 +37,7 @@ class Trainer(BaseTrainer):
             self.data_loader = inf_loop(data_loader)
             self.len_epoch = len_epoch
         self.valid_data_loader = valid_data_loader
+        self.valid_data_loader_warmup = valid_data_loader_warmup
         self.unlabeled_loader = unlabeled_loader
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
@@ -93,7 +94,6 @@ class Trainer(BaseTrainer):
             data, target = data.to(self.device), target.to(self.device)
             with amp.autocast(enabled=self.fp16):
 
-                self.optimizer.zero_grad()
                 output = self.model(data, fp16 = self.fp16)
                 loss = self.train_criterion(output, target)
                 # loss.backward()
@@ -102,6 +102,8 @@ class Trainer(BaseTrainer):
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
             self.scaler.update()
+
+            self.optimizer.zero_grad()
 
             targets.append(target.detach().cpu())
             outputs.append(output.detach().cpu())
@@ -130,14 +132,17 @@ class Trainer(BaseTrainer):
         log = self.train_metrics.result()
 
         if self.do_validation:
-            val_log = self._valid_epoch(epoch)
+            val_log = self._valid_epoch(epoch, self.valid_data_loader)
             log.update(**{'val_'+k : v for k, v in val_log.items()})
+
+            val_log = self._valid_epoch(epoch, self.valid_data_loader_warmup)
+            log.update(**{'val_warmup_'+k : v for k, v in val_log.items()})
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
         return log
 
-    def _valid_epoch(self, epoch):
+    def _valid_epoch(self, epoch, valid_data_loader):
         """
         Validate after training an epoch
 
@@ -149,19 +154,24 @@ class Trainer(BaseTrainer):
         else:
             self.model_eval  = self.model
 
+        
+        # state_dict_path = '/home/hana/sonnh/Covid19_Cough_Classification/saved/models/13-Covid19-PlainCNNSmall/0803_233415/checkpoint_{}_fold{}.pth'.format(epoch, self.fold_idx)
+        # state_dict = torch.load(state_dict_path)['state_dict']
+        # self.model_eval.load_state_dict(state_dict)
+
         self.model_eval.eval()
         self.valid_metrics.reset()
         targets = []
         outputs = []
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(tqdm(self.valid_data_loader)):
+            for batch_idx, (data, target) in enumerate(tqdm(valid_data_loader)):
                 data, target = data.to(self.device), target.to(self.device)
                 target = target.to(dtype=torch.long)
                 output = self.model_eval(data)
                 loss = self.val_criterion(output, target)
                 targets.append(target.detach().cpu())
                 outputs.append(output.detach().cpu())
-                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
+                self.writer.set_step((epoch - 1) * len(valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
             targets = torch.cat(targets)
             outputs = torch.cat(outputs)
