@@ -34,34 +34,35 @@ class PlainCNN(BaseModel):
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc1 = nn.Linear(256, 256, bias=True)
         self.fc2 = nn.Linear(256, 128, bias=True)
-        self.fc3 = nn.Linear(128, 1)
+        self.fc3 = nn.Linear(128, num_classes)
         self.drop1 = nn.Dropout(0.5)
         self.drop2 = nn.Dropout(0.3)
 
-    def forward(self, x):
-        x = x.float()
-        x = self.conv1(x)
-        x = self.act0(x)
+    def forward(self, x, fp16=False):
+        with amp.autocast(enabled=fp16):
+            x = x.float()
+            x = self.conv1(x)
+            x = self.act0(x)
 
-        x = self.max_pool1(x)
+            x = self.max_pool1(x)
 
-        x = self.conv2(x)
-        x = self.act1(x)
+            x = self.conv2(x)
+            x = self.act1(x)
 
-        x = self.bn1(x)
-        
-        x = self.pool(x).view(x.size(0), -1)
-        #x = self.flatten(x)
+            x = self.bn1(x)
+            
+            x = self.pool(x).view(x.size(0), -1)
+            #x = self.flatten(x)
 
-        x = F.relu(self.fc1(x))
+            x = F.relu(self.fc1(x))
 
-        x = self.drop1(x)
+            x = self.drop1(x)
 
-        x = F.relu(self.fc2(x))
+            x = F.relu(self.fc2(x))
 
-        x = self.drop2(x)
+            x = self.drop2(x)
 
-        x = self.fc3(x)
+            x = self.fc3(x)
         return x
 
 class PlainCNNSmall(BaseModel):
@@ -90,34 +91,35 @@ class PlainCNNSmall(BaseModel):
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc1 = nn.Linear(128, 256, bias=True)
         self.fc2 = nn.Linear(256, 128, bias=True)
-        self.fc3 = nn.Linear(128, 1)
+        self.fc3 = nn.Linear(128, num_classes)
         self.drop1 = nn.Dropout(0.5)
         self.drop2 = nn.Dropout(0.3)
 
-    def forward(self, x):
-        x = x.float()
-        x = self.conv1(x)
-        x = self.act0(x)
+    def forward(self, x, fp16=False):
+        with amp.autocast(enabled=fp16):
+            x = x.float()
+            x = self.conv1(x)
+            x = self.act0(x)
 
-        x = self.max_pool1(x)
+            x = self.max_pool1(x)
 
-        x = self.conv2(x)
-        x = self.act1(x)
+            x = self.conv2(x)
+            x = self.act1(x)
 
-        x = self.bn1(x)
-        
-        x = self.pool(x).view(x.size(0), -1)
-        #x = self.flatten(x)
+            x = self.bn1(x)
+            
+            x = self.pool(x).view(x.size(0), -1)
+            #x = self.flatten(x)
 
-        x = F.relu(self.fc1(x))
+            x = F.relu(self.fc1(x))
 
-        x = self.drop1(x)
+            x = self.drop1(x)
 
-        x = F.relu(self.fc2(x))
+            x = F.relu(self.fc2(x))
 
-        x = self.drop2(x)
+            x = self.drop2(x)
 
-        x = self.fc3(x)
+            x = self.fc3(x)
         return x
 
 class TimmBackbone(BaseModel):
