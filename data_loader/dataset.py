@@ -11,6 +11,36 @@ from .audio_preprocessing import mfcc_feature, extract_mfcc_feature
 # from .mel_spec import audio2melspec, create_spectrogram
 from .audio_preprocessing import trim_and_pad, padding_repeat, random_crop
 
+import copy
+from multiprocessing import Pool
+from functools import partial
+
+def load_audio_(i, df=None, target_sr=22050):
+    item = df.iloc[i]
+    uuid = item['uuid']
+    audio_path = item['audio_paths']
+    audio, sr = sf.read(audio_path, dtype="float32")
+    audio = librosa.resample(audio, sr, target_sr)
+    return uuid, audio
+
+def load_audio(df, target_sr):
+    audios = {}
+#     for i in tqdm(range(len(df))):
+#         uuid, audio = load_audio_(i, df, target_sr)
+#         audios[uuid] = audio
+
+    pool = Pool()
+    tmp = pool.map(
+        partial(
+            load_audio_, df = df,
+            target_sr = target_sr
+        ),
+        range(len(df))
+    )
+    for key, audio in tmp:
+        audios[key] = audio
+    return audios
+
 class CovidDataset(torch.utils.data.Dataset):
     def __init__(self, df, audio_folder, config, test = False, audio_transforms=None, image_transform=None):
         super().__init__()
@@ -20,18 +50,19 @@ class CovidDataset(torch.utils.data.Dataset):
         self.audio_transforms = audio_transforms
         self.test = test
 
-        self.mfcc_config = config['dataset'].get('mfcc_config', None)
-        if self.mfcc_config is None:
-            self.mfcc_config = {}
+        self.audio_config = config['dataset'].get('audio_config', None)
+        if self.audio_config is None:
+            self.audio_config = {}
         
-        self.target_sr = self.mfcc_config.get('target_sr', 48000)
-        max_duration = self.mfcc_config.get('max_duration', 15)
+        self.target_sr = self.audio_config.get('target_sr', 48000)
+        max_duration = self.audio_config.get('max_duration', 15)
         self.max_samples = int(max_duration * self.target_sr)
 
-        # self.melspec_config = config['dataset']['melspec_config']
-        # target_sr = self.melspec_config.get('target_sr', 48000)
-        # max_duration = self.melspec_config.get('max_duration', 15)
-        # self.max_samples = int(max_duration * target_sr)
+        cache = config['dataset'].get('cache', False)
+        if cache:
+            self.audios = load_audio(self.df, self.target_sr)
+        else:
+            self.audios = None
 
     def get_label(self, idx):
         return self.df.iloc[idx]["assessment_result"].astype("float32")
@@ -47,15 +78,21 @@ class CovidDataset(torch.utils.data.Dataset):
         # label_encoded[np.arange(label.size),int(label)] = 1
 
         label_encoded = torch.tensor(label, dtype=torch.long)
-
-        try:
-            audio_path = os.path.join(self.audio_folder, "%s.wav"%item['uuid'])
-            audio, sr = sf.read(audio_path, dtype="float32")
-        except:
-            audio_path = item['audio_paths']
-            audio, sr = sf.read(audio_path, dtype="float32")
-        audio = librosa.resample(audio, sr, self.target_sr)
-        # audio, sr = librosa.load(audio_path, sr = self.target_sr)
+        
+        if self.audios is not None:
+            uuid = item['uuid']
+            audio = copy.deepcopy(self.audios[uuid])
+            sr = self.target_sr
+        else:
+            try:
+                audio_path = item['audio_paths']
+                audio, sr = sf.read(audio_path, dtype="float32")
+                # audio, sr = librosa.load(audio_path, sr = self.target_sr)
+            except:
+                audio_path = os.path.join(self.audio_folder, "%s.wav"%item['uuid'])
+                audio, sr = sf.read(audio_path, dtype="float32")
+            audio = librosa.resample(audio, sr, self.target_sr)
+        
         
         if self.test:
             audio = padding_repeat(audio, self.max_samples)
@@ -64,62 +101,23 @@ class CovidDataset(torch.utils.data.Dataset):
             # audio = trim_and_pad(audio, self.max_samples)
 
         if self.audio_transforms is not None:
+            # audio_path = item['audio_paths']
+            # uuid = audio_path.split('/')[-1].split('.')[0]
+            # if uuid[-2] != '_':
             audio = self.audio_transforms(samples=audio, sample_rate=sr)
+            # else:
+            #     # print('oversampling no need to aug')
+            #     pass
+
         #mfcc
-        # # image = audio2image(audio, fs, self.audio_transforms)
-        # image = mfcc_feature(audio, fs, self.audio_transforms)
-        image = extract_mfcc_feature(audio, sr, self.mfcc_config)
+        # image = extract_mfcc_feature(audio, self.target_sr, self.mfcc_config)
+        # image = extract_mfcc_feature(audio, sr, self.mfcc_config)
         
         # melspec
-        # image = audio2melspec(audio, sr, self.melspec_config)
+        # image = audio2melspec(audio, self.target_sr, self.melspec_config)
 
-        if self.image_transform is not None:
-            image = self.image_transform(image = image)['image']
+        # if self.image_transform is not None:
+        #     image = self.image_transform(image = image)['image']
 
-        return image, label_encoded
-
-class TestDataset:
-    def __init__(self, csv_path, audio_folder, mfcc_config=None, image_transform=None):
-        self.audio_paths= glob.glob(os.path.join(audio_folder, "*.wav"))
-        self.audio_folder = audio_folder
-        self.csv_path = csv_path
-        self.df = pd.read_csv(self.csv_path)
-        self.image_transform = image_transform
-        self.mfcc_config = mfcc_config
-        if mfcc_config is None:
-            self.mfcc_config = {}
-    def __len__(self):
-        return self.df.shape[0]
-
-    def __getitem__(self, idx):
-        item = self.df.iloc[idx]
-        uuid = item["uuid"]
-        # audio_path = item["file_path"]
-        audio_path = "%s.wav"%uuid
-        audio_path = os.path.join(self.audio_folder, audio_path)
-        audio, fs = sf.read(audio_path, dtype="float32")
-        image = extract_mfcc_feature(audio, fs, self.mfcc_config, for_test=True)
-        if self.image_transform is not None:
-            image = self.image_transform(image=image)["image"]
-
-        return torch.from_numpy(image), uuid
-
-class Covid19StudyDataset(torch.utils.data.Dataset):
-    def __init__(self, df, images_dir, transforms=None):
-        self.df = df
-        self.images_dir = images_dir
-        self.transforms = transforms
-
-    def __getitem__(self, idx):
-        items = self.df.iloc[idx]
-        image_id = str(items["id"]).split("_")[0] # remove image prefix
-        label = items["label"]
-        labels = torch.tensor(items[5:9].to_list())
-        image_path = os.path.join(self.images_dir, "{}.jpg".format(image_id))
-        image = cv2.imread(image_path)
-        if self.transforms is not None:
-            image = self.transforms(image)
-        return image, labels
-
-    def __len__(self):
-        return len(self.df)
+        # return image, label_encoded
+        return audio, label_encoded
