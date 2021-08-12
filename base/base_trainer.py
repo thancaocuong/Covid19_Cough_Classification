@@ -68,16 +68,16 @@ class BaseTrainer:
         not_improved_count = 0
         best_epoch = 1
         for epoch in range(self.start_epoch, self.epochs + 1):
-            if epoch < self.warmup:
-                if isinstance(self.model, nn.DataParallel):
-                    self.model.module.freeze()
-                else:
-                    self.model.freeze()
-            else:
-                if isinstance(self.model, nn.DataParallel):
-                    self.model.module.unfreeze()
-                else:
-                    self.model.unfreeze()
+            # if epoch < self.warmup:
+            #     if isinstance(self.model, nn.DataParallel):
+            #         self.model.module.freeze()
+            #     else:
+            #         self.model.freeze()
+            # else:
+            #     if isinstance(self.model, nn.DataParallel):
+            #         self.model.module.unfreeze()
+            #     else:
+            #         self.model.unfreeze()
             result = self._train_epoch(epoch)
 
             # save logged informations into log dict

@@ -1,0 +1,66 @@
+{
+    "name": "Covid19-Plain-MFCC-newdata",
+    "n_gpu": 1,
+    "fp16": false,
+    "arch": {
+        "type": "PlainCNNSmall",
+        "args": {
+            "num_classes": 1,
+            "inchannels": 1,
+            "use_coord": true,
+            "pretrained": true
+        }
+    },
+    "do_pseudo": false,
+    "unlabeled_dataset": {
+        "csv_path": "../dataset/public_test_sample_submission.csv",
+        "audio_folder": "../dataset/public_test_audio_files",
+        "training_batch_size": 16,
+        "num_workers": 10
+    },
+    "dataset": {
+        "csv_path": "../dataset/final_augmented_fold_data.csv",
+        "audio_folder": "../dataset/public_train_audio_files_augmented_new",
+        "training_batch_size": 32,
+        "validate_batch_size": 32,
+        "num_workers": 15,
+        "mfcc_config": {
+            "do_remove_silent": true,
+            "normalize": false,
+            "use_derivative": false,
+            "n_mfcc": 39,
+            "n_fft": 2048,
+            "hop_length": 512,
+            "target_sr": 22050,
+            "max_duration": 7
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 0.0005
+        }
+    },
+    "loss": "bce_with_logits_loss",
+    "metrics": [
+        "roc_auc"
+    ],
+    "lr_scheduler": {
+        "type": "StepLR",
+        "args": {
+            "step_size": 25,
+            "gamma": 0.3162278
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+        "save_dir": "saved/",
+        "save_period": 1,
+        "verbosity": 2,
+        "monitor": "max val_roc_auc",
+        "early_stop": 100,
+        "warmup": -1,
+        "tensorboard": true
+    },
+    "ema": false
+}

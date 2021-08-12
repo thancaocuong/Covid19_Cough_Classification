@@ -64,11 +64,11 @@ def padding_repeat(audio, max_samples):
 def random_crop(audio, max_length):
     len_y = audio.shape[0]
     if len_y < max_length:
-        # audio = padding_repeat(audio, max_length)
-        new_y = np.zeros(max_length, dtype=audio.dtype)
-        start = np.random.randint(max_length - len_y)
-        new_y[start:start + len_y] = audio
-        audio = new_y.astype(np.float32)
+        audio = padding_repeat(audio, max_length)
+        # new_y = np.zeros(max_length, dtype=audio.dtype)
+        # start = np.random.randint(max_length - len_y)
+        # new_y[start:start + len_y] = audio
+        # audio = new_y.astype(np.float32)
     elif len_y > max_length:
         start = np.random.randint(len_y - max_length)
         audio = audio[start:start + max_length].astype(np.float32)
