@@ -5,6 +5,7 @@ from base import BaseModel
 import timm
 from .coordconv import CoordConv1d, CoordConv2d, CoordConv3d
 from .cnn14 import Cnn14
+from .mobilenetv2 import MobileNetV2
 
 def init_layer(layer):
     nn.init.xavier_uniform_(layer.weight)
@@ -18,6 +19,51 @@ def init_bn(bn):
     bn.bias.data.fill_(0.)
     bn.weight.data.fill_(1.0)
 
+
+class Transfer_MobilenetV2(nn.Module):
+    def __init__(self, sample_rate, window_size=512, hop_size=512, mel_bins=128, fmin=0, 
+        fmax=48000, classes_num=1, freeze_base=True):
+        """Classifier for a new task using pretrained Cnn14 as a sub module.
+        """
+        super(Transfer_MobilenetV2, self).__init__()
+        audioset_classes_num = 527
+        
+        self.base = MobileNetV2(sample_rate, window_size, hop_size, mel_bins, fmin, 
+            fmax, audioset_classes_num)
+
+        # Transfer to another task layer
+        self.head = torch.nn.Sequential(
+            nn.Linear(1024, 512, bias=True),
+            nn.GELU(),
+            nn.Dropout(0.2),
+            nn.Linear(512, 256, bias=True),
+            nn.GELU(),
+            nn.Dropout(0.2),
+            nn.Linear(256, classes_num, bias=True)
+        )
+        if freeze_base:
+            print("freeze base layer")
+            # Freeze AudioSet pretrained layers
+            for param in self.base.parameters():
+                param.requires_grad = False
+
+        # self.init_weights()
+
+    def init_weights(self):
+        # init_layer(self.fc_transfer)
+        pass
+
+    def load_from_pretrain(self, pretrained_checkpoint_path):
+        checkpoint = torch.load(pretrained_checkpoint_path)
+        self.base.load_state_dict(checkpoint['model'])
+
+    def forward(self, input, mixup_lambda=None):
+        """Input: (batch_size, data_length)
+        """
+        embedding = self.base(input, mixup_lambda)
+
+        logit =  self.head(embedding) 
+        return logit
 
 class Transfer_Cnn14(nn.Module):
     def __init__(self, sample_rate, window_size=512, hop_size=512, mel_bins=128, fmin=0, 

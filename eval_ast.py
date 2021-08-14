@@ -5,11 +5,12 @@ import gc
 import torch
 import numpy as np
 import pandas as pd
+from model import ASTModel
 import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from data_loader import CovidDataset, TestDataset, TestCNN14Dataset
+from data_loader import CovidDataset, TestDataset, TestCNN14Dataset, AstTestDataset
 from data_loader import AudioCompose, WhiteNoise, TimeShift, ChangePitch, ChangeSpeed
 from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion
 from parse_config import ConfigParser
@@ -17,7 +18,7 @@ from trainer import Trainer
 from utils import prepare_device
 import torchvision
 from tqdm import tqdm
-
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 def post_process_function(output_tensor):
     outputs = []
     for output in output_tensor:
@@ -45,41 +46,48 @@ class EnsembleModel(torch.nn.Module):
         # return torch.sum(torch.stack(outputs))
 
 def init_unlabeled_dataset(dataset_params):
-    return  TestCNN14Dataset(dataset_params)
+    return  AstTestDataset(dataset_params)
 
 def main(config, args):
     unlabeled_dataset = init_unlabeled_dataset(config["dataset"]["test"])
     device, device_ids = prepare_device(config['n_gpu'])
+    device = torch.device("cuda:0")
     model_dir = args.model_dir
 
     CHECKPOINT = [os.path.join(model_dir, "model_best_fold1"),
                   os.path.join(model_dir, "model_best_fold2"),
-                  os.path.join(model_dir, "model_best_fold3"),
-                  os.path.join(model_dir, "model_best_fold4"),
-                  os.path.join(model_dir, "model_best_fold5"),
+                #   os.path.join(model_dir, "model_best_fold3"),
+                #   os.path.join(model_dir, "model_best_fold4"),
+                #   os.path.join(model_dir, "model_best_fold5"),
                  ]
     models = []
     for i in range(len(CHECKPOINT)):
-        state = torch.load(CHECKPOINT[i])["state_dict"]
-        model = config.init_obj('arch', module_arch)
+        state = torch.load(CHECKPOINT[i], map_location="cpu")["state_dict"]
+        input_tdim = 512
+        model = ASTModel(input_tdim=input_tdim,label_dim=1, audioset_pretrain=True)
+        # model = config.init_obj('arch', module_arch)
         model.load_state_dict(state)
         model = model.to(device)
         models.append(model.eval())
     ensemble_model = EnsembleModel(models, None, [1])
     ensemble_model.cuda().eval()
     results = [pd.DataFrame(columns=['uuid', 'assessment_result']) for i in range(len(models))]
+    ensemble_result = pd.DataFrame(columns=['uuid', 'assessment_result'])
     progress_bar = tqdm(total=len(unlabeled_dataset))
     for i in range(len(unlabeled_dataset)):
         feature, id = unlabeled_dataset[i]
         with torch.no_grad():
             feature = feature[None, ...].cuda()
             scores = ensemble_model(feature)
+            refined_score = np.array(scores).mean()
+            ensemble_result.loc[i] = [id, refined_score]
             for idx, score_fold in enumerate(scores):
                 results[idx].loc[i] = [id, score_fold]
 
         progress_bar.update(1)
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
+    ensemble_result.to_csv(os.path.join(args.save_dir, "results.csv"))
     for idx, pd_results in enumerate(results):
         fold_dir = os.path.join(args.save_dir, "fold{}".format(idx+1))
         if not os.path.exists(fold_dir):

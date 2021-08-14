@@ -16,9 +16,8 @@ from parse_config import ConfigParser
 from trainer import Trainer
 from utils import prepare_device
 import torchvision
-from ranger import Ranger
 from audiomentations.core.composition import BaseCompose
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 # fix random seeds for reproducibility
 SEED = 123
 torch.manual_seed(SEED)
@@ -51,20 +50,19 @@ def init_dataset(dataset_params, fold_idx=1):
     # train_audio_transform = AudioCompose([WhiteNoise(0.005),
     #                                       TimeShift(),
     #                                       ChangeSpeed()])
-    train_audio_transform = Compose([
+    train_audio_transform = OneOf([
                     # AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-                    AddGaussianSNR(p=0.3), # new
-                    TimeStretch(min_rate=0.9, max_rate=1.2, p=0.5),
-                    PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
-                    Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
+                    AddGaussianSNR(p=1.0), # new
+                    # TimeStretch(min_rate=0.9, max_rate=1.2, p=0.5),
+                    # PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
+                    Shift(min_fraction=-0.5, max_fraction=0.5, p=1.0),
                     PolarityInversion(p=1.0),
-                    Gain()
+                    # Gain()
                 ], p=1.0)
-    # train_audio_transform = None
+    train_audio_transform = None
     train_dataset = CNN14_Dataset(
             fold_idx,
-            dataset_params=dataset_params["train"],
-            transform=train_audio_transform
+            dataset_params=dataset_params["train"]
         )
 
     validation_dataset = CNN14_Dataset(
@@ -73,9 +71,9 @@ def init_dataset(dataset_params, fold_idx=1):
                             )
     return train_dataset, validation_dataset
 
-
 def init_unlabeled_dataset(dataset_params):
     return  TestCNN14Dataset(dataset_params)
+
 
 def main(config, fold_idx):
     logger = config.get_logger('train')
@@ -86,8 +84,8 @@ def main(config, fold_idx):
         train_dataset,
         batch_size=config["dataset"]['training_batch_size'],
         num_workers=config["dataset"]['num_workers'],
-        # shuffle=True,
-        sampler=ImbalancedDatasetSampler(train_dataset),
+        shuffle=True,
+        # sampler=ImbalancedDatasetSampler(train_dataset),
         drop_last = True
     )
     eval_loader = torch.utils.data.DataLoader(
@@ -107,7 +105,7 @@ def main(config, fold_idx):
                     )
     # build model architecture, then print to console
     model = config.init_obj('arch', module_arch)
-    model.load_from_pretrain("pretrained_cnn14.pth")
+    model.load_from_pretrain("mbv2.pth")
     logger.info(model)
 
     # prepare for (multi-device) GPU training
@@ -123,9 +121,9 @@ def main(config, fold_idx):
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     # optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
-    optimizer = Ranger([{'params': model.base.parameters(), 'lr': 1e-4}, {'params': model.head.parameters()}], lr=1e-3)
+    optimizer = torch.optim.Adam([{'params': model.base.parameters(), 'lr': 1e-4}, {'params': model.head.parameters()}], lr=1e-3)
     lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
-
+    print("start trainer")
     trainer = Trainer(model, criterion, metrics, optimizer,
                       config=config,
                       device=device,

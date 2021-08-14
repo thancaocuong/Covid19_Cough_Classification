@@ -9,16 +9,18 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from data_loader import CovidDataset, TestDataset, ImbalancedDatasetSampler, CNN14_Dataset, TestCNN14Dataset
+from model import ASTModel
+from data_loader import CovidDataset, TestDataset, ImbalancedDatasetSampler, CNN14_Dataset, AstDataset
 from data_loader import AudioCompose, WhiteNoise, TimeShift, ChangePitch, ChangeSpeed
-from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion, AddGaussianSNR
+# from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion, AddGaussianSNR
+from torch_audiomentations import Compose, Gain, PolarityInversion, Shift, LowPassFilter
 from parse_config import ConfigParser
 from trainer import Trainer
 from utils import prepare_device
 import torchvision
-from ranger import Ranger
 from audiomentations.core.composition import BaseCompose
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+# from audio_augmentations import *
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 # fix random seeds for reproducibility
 SEED = 123
 torch.manual_seed(SEED)
@@ -48,34 +50,33 @@ class OneOf(BaseCompose):
 def init_dataset(dataset_params, fold_idx=1):
     print("*"*10, " fold {}".format(fold_idx), "*"*10)
     """StratifiedKFold"""
-    # train_audio_transform = AudioCompose([WhiteNoise(0.005),
-    #                                       TimeShift(),
-    #                                       ChangeSpeed()])
-    train_audio_transform = Compose([
-                    # AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-                    AddGaussianSNR(p=0.3), # new
-                    TimeStretch(min_rate=0.9, max_rate=1.2, p=0.5),
-                    PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
-                    Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
-                    PolarityInversion(p=1.0),
-                    Gain()
-                ], p=1.0)
-    # train_audio_transform = None
-    train_dataset = CNN14_Dataset(
-            fold_idx,
+    transform = Compose(
+    transforms=[
+        Gain(
+            min_gain_in_db=-15.0,
+            max_gain_in_db=5.0,
+            p=0.5,
+        ),
+        Shift(p=0.5),
+        PolarityInversion(p=0.5)
+        ]
+    )
+    train_dataset = AstDataset(
             dataset_params=dataset_params["train"],
-            transform=train_audio_transform
+            transform=transform,
+            fold_idx=fold_idx
         )
 
-    validation_dataset = CNN14_Dataset(
-            fold_idx,
-            dataset_params=dataset_params["val"]
-                            )
+    validation_dataset = AstDataset(
+            dataset_params=dataset_params["val"],
+            transform=None,
+            fold_idx=fold_idx
+        )
     return train_dataset, validation_dataset
 
+def init_unlabeled_dataset(csv_path, audio_folder="", mfcc_config=None):
+    return  TestDataset(csv_path, audio_folder, mfcc_config)
 
-def init_unlabeled_dataset(dataset_params):
-    return  TestCNN14Dataset(dataset_params)
 
 def main(config, fold_idx):
     logger = config.get_logger('train')
@@ -96,22 +97,28 @@ def main(config, fold_idx):
         num_workers=config["dataset"]['num_workers']
     )
     unlabeled_loader = None
-    if config["do_pseudo"]:
-        unlabeled_dataset = init_unlabeled_dataset(config["dataset"]["test"])
-        unlabeled_loader = torch.utils.data.DataLoader(
-                    unlabeled_dataset,
-                    batch_size=config["dataset"]['validate_batch_size'], 
-                    num_workers=config["dataset"]['num_workers'],
-                    shuffle=True,
-                    drop_last = True
-                    )
+    # if config["do_pseudo"]:
+    #     unlabeled_dataset = init_unlabeled_dataset(config["unlabeled_dataset"]["csv_path"],
+    #                                             config["unlabeled_dataset"]["audio_folder"],
+    #                                             config["dataset"]["mfcc_config"],
+    #                                             )
+    #     unlabeled_loader = torch.utils.data.DataLoader(
+    #                 unlabeled_dataset,
+    #                 batch_size=config["unlabeled_dataset"]['training_batch_size'], 
+    #                 num_workers=config["unlabeled_dataset"]['num_workers'],
+    #                 shuffle=True,
+    #                 drop_last = True
+    #                 )
     # build model architecture, then print to console
-    model = config.init_obj('arch', module_arch)
-    model.load_from_pretrain("pretrained_cnn14.pth")
+    # model = config.init_obj('arch', module_arch)
+    # model.load_from_pretrain("pretrained_cnn14.pth")
+    input_tdim = 512
+    model = ASTModel(input_tdim=input_tdim,label_dim=1, audioset_pretrain=True)
     logger.info(model)
 
     # prepare for (multi-device) GPU training
     device, device_ids = prepare_device(config['n_gpu'])
+    device = torch.device("cuda:1")
     model = model.to(device)
     if len(device_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=device_ids)
@@ -122,8 +129,8 @@ def main(config, fold_idx):
 
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    # optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
-    optimizer = Ranger([{'params': model.base.parameters(), 'lr': 1e-4}, {'params': model.head.parameters()}], lr=1e-3)
+    optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
+    # optimizer = torch.optim.Adam([{'params': model.base.parameters(), 'lr': 5e-5}, {'params': model.head.parameters()}], lr=1e-3, weight_decay=5e-4)
     lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
 
     trainer = Trainer(model, criterion, metrics, optimizer,
@@ -133,7 +140,8 @@ def main(config, fold_idx):
                       valid_data_loader=eval_loader,
                       unlabeled_loader=unlabeled_loader,
                       lr_scheduler=lr_scheduler,
-                      fold_idx=fold_idx
+                      fold_idx=fold_idx,
+                      fp16=config['fp16']
                       )
 
     trainer.train()
@@ -159,5 +167,5 @@ if __name__ == '__main__':
         CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size')
     ]
     config = ConfigParser.from_args(args, options)
-    for fold_idx in range(1, 6):
+    for fold_idx in range(2, 6):
         main(config, fold_idx)

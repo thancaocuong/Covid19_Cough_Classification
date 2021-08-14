@@ -4,14 +4,14 @@ from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 from tqdm import tqdm
-
+from torch.cuda.amp import GradScaler
 class Trainer(BaseTrainer):
     """
     Trainer class
     """
     def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
                  data_loader, valid_data_loader=None, unlabeled_loader=None,
-                 lr_scheduler=None, len_epoch=None, fold_idx=0, warmup=0):
+                 lr_scheduler=None, len_epoch=None, fold_idx=0, warmup=0, fp16=True):
         super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx, warmup)
         self.config = config
         self.device = device
@@ -29,10 +29,14 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_size))
         self.log_step = int(len(data_loader) // 5)
-        self.semi_epochs = 20
+        self.semi_epochs = 5
+        self.scaler = GradScaler()
+        self.fp16 = fp16
+        print("Using Fp16 mode is" , self.fp16)
         self.do_pseudo = self.unlabeled_loader is not None
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
+        self.test_print = True
     def _semi_train_epoch(self):
         if self.do_pseudo:
             for epoch_idx in range(self.semi_epochs):
@@ -52,10 +56,10 @@ class Trainer(BaseTrainer):
                     loss.backward()
                     self.optimizer.step()
                     if batch_idx % self.log_step == 0:
-                        self.logger.debug('Semi Train Epoch: {} Loss: {:.6f}'.format(
+                        self.logger.info('Semi Train Epoch: {} Loss: {:.6f}'.format(
                             epoch_idx,
                             loss.item()))
-                    if (batch_idx % 5) == 0:
+                    if (batch_idx % 30) == 0:
                         self._train_epoch(self.epochs+1+epoch_idx)
             log = self.train_metrics.result()
             if self.do_validation:
@@ -76,16 +80,20 @@ class Trainer(BaseTrainer):
         targets = []
         outputs = []
         for batch_idx, (data, target) in enumerate(self.data_loader):
-            data, target = data.to(self.device), target.to(self.device)
-
-            self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
-            loss.backward()
-            self.optimizer.step()
+            with torch.cuda.amp.autocast(enabled=self.fp16):
+                data, target = data.to(self.device), target.to(self.device)
+                if self.test_print:
+                    print(target)
+                self.test_print = False
+                self.optimizer.zero_grad()
+                output = self.model(data)
+                loss = self.criterion(output, target)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
             targets.append(target.detach().cpu())
             outputs.append(output.detach().cpu())
-            self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
+            # self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
 
             if batch_idx % self.log_step == 0:
@@ -128,7 +136,7 @@ class Trainer(BaseTrainer):
                 loss = self.criterion(output, target)
                 targets.append(target.detach().cpu())
                 outputs.append(output.detach().cpu())
-                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
+                # self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
             targets = torch.cat(targets)
             outputs = torch.cat(outputs)

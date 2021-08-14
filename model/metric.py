@@ -1,6 +1,8 @@
 import torch
 import sklearn
 def roc_auc(output, target):
+    output = output.float().cpu()
+    target = target.float().cpu()
     output = torch.sigmoid(output)
     output = output.numpy()
     target = target.numpy()

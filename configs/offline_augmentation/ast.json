@@ -1,7 +1,7 @@
 {
-    "name": "CNN14_Audioset",
+    "name": "AST",
     "n_gpu": 1,
-    "fp16": false,
+    "fp16": true,
     "arch": {
         "type": "Transfer_Cnn14",
         "args": {
@@ -26,23 +26,47 @@
         "test":{
             "csv_path": "/home/asilla/sonnh/covid/data/aicv115m_final_public_test/public_test_sample_submission.csv",
             "audio_folder": "/home/asilla/sonnh/covid/data/aicv115m_final_public_test/public_test_audio_files",
+            "for_test": true,
             "period": 7,
-            "for_test": false
+            "melbins": 128,
+            "freqm": 0,
+            "noise": false,
+            "timem": 0,
+            "target_length": 512,
+            "norm_mean": -6.0542064,
+            "norm_std": 6.219794,
+            "skip_norm": false
         },
         "train":{
             "csv_path": "/home/asilla/sonnh/covid/data/group_included_rmsingle2__rm_audio_slient_kfold.csv",
             "audio_folder": "/home/asilla/sonnh/covid/data/public_train_audio_files_augmented_new_kfold",
             "period": 7,
-            "for_test": false
+            "for_test": false,
+            "melbins": 128,
+            "freqm": 48,
+            "noise": true,
+            "timem": 192,
+            "target_length": 512,
+            "norm_mean": -6.0542064,
+            "norm_std": 6.219794,
+            "skip_norm": false
 
         },
         "val":{
             "csv_path": "/home/asilla/sonnh/covid/data/group_included_rmsingle2__rm_audio_slient_kfold.csv",
             "audio_folder": "/home/asilla/sonnh/covid/data/public_train_audio_files_augmented_new_kfold",
             "for_test": true,
-            "period": 7
+            "period": 7,
+            "melbins": 128,
+            "freqm": 0,
+            "noise": false,
+            "timem": 0,
+            "target_length": 512,
+            "norm_mean": -6.0542064,
+            "norm_std": 6.219794,
+            "skip_norm": false
         },
-        "training_batch_size": 32,
+        "training_batch_size": 12,
         "validate_batch_size": 32,
         "num_workers": 15,
         "mfcc_config":
@@ -63,12 +87,12 @@
     "lr_scheduler": {
         "type": "StepLR",
         "args": {
-            "step_size": 40,
+            "step_size": 15,
             "gamma": 0.3162278
         }
     },
     "trainer": {
-        "epochs": 60,
+        "epochs": 25,
 
         "save_dir": "saved/",
         "save_period": 1,

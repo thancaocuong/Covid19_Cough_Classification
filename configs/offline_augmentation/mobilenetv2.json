@@ -1,21 +1,21 @@
 {
-    "name": "CNN14_Audioset",
+    "name": "MobilenetV2_Audioset",
     "n_gpu": 1,
     "fp16": false,
     "arch": {
-        "type": "Transfer_Cnn14",
+        "type": "Transfer_MobilenetV2",
         "args": {
                  "sample_rate": 22050,
                  "window_size": 1024,
                  "hop_size": 512,
                  "mel_bins": 64,
-                 "fmin": 0,
+                 "fmin": 50,
                  "fmax": 48000,
                  "classes_num": 1,
                  "freeze_base": false
                 }
     },
-    "do_pseudo": false,
+    "do_pseudo": true,
     "unlabeled_dataset": {
         "csv_path": "../dataset/public_test_sample_submission.csv",
         "audio_folder": "../dataset/public_test_audio_files",
@@ -30,19 +30,19 @@
             "for_test": false
         },
         "train":{
-            "csv_path": "/home/asilla/sonnh/covid/data/group_included_rmsingle2__rm_audio_slient_kfold.csv",
+            "csv_path": "/home/asilla/sonnh/covid/data/final_augmented_fold_data_newkfold.csv",
             "audio_folder": "/home/asilla/sonnh/covid/data/public_train_audio_files_augmented_new_kfold",
             "period": 7,
             "for_test": false
 
         },
         "val":{
-            "csv_path": "/home/asilla/sonnh/covid/data/group_included_rmsingle2__rm_audio_slient_kfold.csv",
+            "csv_path": "/home/asilla/sonnh/covid/data/final_augmented_fold_data_newkfold.csv",
             "audio_folder": "/home/asilla/sonnh/covid/data/public_train_audio_files_augmented_new_kfold",
             "for_test": true,
             "period": 7
         },
-        "training_batch_size": 32,
+        "training_batch_size": 64,
         "validate_batch_size": 32,
         "num_workers": 15,
         "mfcc_config":
@@ -63,12 +63,12 @@
     "lr_scheduler": {
         "type": "StepLR",
         "args": {
-            "step_size": 40,
+            "step_size": 10,
             "gamma": 0.3162278
         }
     },
     "trainer": {
-        "epochs": 60,
+        "epochs": 25,
 
         "save_dir": "saved/",
         "save_period": 1,

@@ -21,7 +21,6 @@ class CovidDataset(torch.utils.data.Dataset):
         if mfcc_config is None:
             self.mfcc_config = {}
         self.for_test = for_test
-
     def get_label(self, idx):
         return self.df.iloc[idx]["assessment_result"].astype("float32")
 
@@ -50,7 +49,7 @@ class CovidDataset(torch.utils.data.Dataset):
         return image, label_encoded
 
 class CNN14_Dataset(torch.utils.data.Dataset):
-    def __init__(self, fold_idx, dataset_params):
+    def __init__(self, fold_idx, dataset_params, transform=None):
         super().__init__()
         self.df = None
         self.fold_idx = fold_idx
@@ -58,6 +57,7 @@ class CNN14_Dataset(torch.utils.data.Dataset):
         self.audio_folder = dataset_params.get("audio_folder", "")
         self.period = dataset_params.get("period", 7)
         self.for_test = dataset_params.get("for_test", False)
+        self.transform = transform
         self._load_data()
 
     def get_label(self, idx):
@@ -68,7 +68,10 @@ class CNN14_Dataset(torch.utils.data.Dataset):
         df = pd.read_csv(df_path)
         if self.for_test:
             self.df = df[df["fold"] == self.fold_idx]
-            self.df = self.df[self.df["is_augmented"] == 0]
+            try:
+                self.df = self.df[self.df["is_augmented"] == 0]
+            except:
+                pass
         else:
             self.df = df[df["fold"] != self.fold_idx]
     def __len__(self):
@@ -86,6 +89,13 @@ class CNN14_Dataset(torch.utils.data.Dataset):
 
         audio_path = os.path.join(self.audio_folder, "%s.wav"%item['uuid'])
         audio, fs = librosa.load(audio_path)
+        
+        if self.transform is not None and label_encoded == 1:
+            try:
+                audio, fs = self.transform(audio, fs)
+            except:
+                audio = self.transform(samples=audio, sample_rate=fs)
+
         max_samples = fs * self.period
         if self.for_test:
             audio = padding_repeat(audio, max_samples)
@@ -123,6 +133,10 @@ class TestCNN14Dataset(torch.utils.data.Dataset):
         audio_path = os.path.join(self.audio_folder, "%s.wav"%item['uuid'])
         audio, fs = librosa.load(audio_path)
         max_samples = fs * self.period
+        # if self.for_test:
+        #     audio = padding_repeat(audio, max_samples)
+        # else:
+        #     audio = random_crop(audio, max_samples)
         audio = padding_repeat(audio, max_samples)
         return torch.from_numpy(audio).float(), uuid
 
