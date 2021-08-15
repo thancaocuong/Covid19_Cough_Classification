@@ -9,6 +9,7 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
+from ranger import Ranger
 from model import ASTModel
 from data_loader import CovidDataset, TestDataset, ImbalancedDatasetSampler, CNN14_Dataset, AstDataset
 from data_loader import AudioCompose, WhiteNoise, TimeShift, ChangePitch, ChangeSpeed
@@ -112,16 +113,18 @@ def main(config, fold_idx):
     # build model architecture, then print to console
     # model = config.init_obj('arch', module_arch)
     # model.load_from_pretrain("pretrained_cnn14.pth")
-    input_tdim = 512
+    input_tdim = 256
+    # model = ASTModel(label_dim=1, fstride=10, tstride=10, input_fdim=128, input_tdim=512, imagenet_pretrain=True, audioset_pretrain=False, model_size='tiny224')
     model = ASTModel(input_tdim=input_tdim,label_dim=1, audioset_pretrain=True)
     logger.info(model)
-
     # prepare for (multi-device) GPU training
     device, device_ids = prepare_device(config['n_gpu'])
     device = torch.device("cuda:1")
     model = model.to(device)
+    multi_gpus = False
     if len(device_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=device_ids)
+        multi_gpus = True
 
     # get function handles of loss and metrics
     criterion = getattr(module_loss, config['loss'])
@@ -129,10 +132,10 @@ def main(config, fold_idx):
 
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
+    # optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
+    optimizer = Ranger(trainable_params, lr=5e-4)
     # optimizer = torch.optim.Adam([{'params': model.base.parameters(), 'lr': 5e-5}, {'params': model.head.parameters()}], lr=1e-3, weight_decay=5e-4)
     lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
-
     trainer = Trainer(model, criterion, metrics, optimizer,
                       config=config,
                       device=device,
@@ -141,7 +144,8 @@ def main(config, fold_idx):
                       unlabeled_loader=unlabeled_loader,
                       lr_scheduler=lr_scheduler,
                       fold_idx=fold_idx,
-                      fp16=config['fp16']
+                      fp16=config['fp16'],
+                      multi_gpus=multi_gpus
                       )
 
     trainer.train()
@@ -167,5 +171,5 @@ if __name__ == '__main__':
         CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size')
     ]
     config = ConfigParser.from_args(args, options)
-    for fold_idx in range(2, 6):
+    for fold_idx in range(1, 6):
         main(config, fold_idx)

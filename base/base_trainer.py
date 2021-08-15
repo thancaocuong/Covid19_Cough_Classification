@@ -9,7 +9,7 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config, fold_idx=0, warmup=0):
+    def __init__(self, model, criterion, metric_ftns, optimizer, config, fold_idx=0, warmup=0, multi_gpus=False):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
@@ -37,7 +37,7 @@ class BaseTrainer:
                 self.early_stop = inf
 
         self.start_epoch = 1
-
+        self.multi_gpus = multi_gpus
         self.checkpoint_dir = config.save_dir
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
@@ -50,6 +50,7 @@ class BaseTrainer:
         if not os.path.exists(config.log_dir):
             os.makedirs(config.log_dir)
         self.warmup = warmup
+        self.save_interval = self.epochs // 5
     @abstractmethod
     def _semi_train_epoch(self):
         raise NotImplementedError
@@ -137,7 +138,7 @@ class BaseTrainer:
         state = {
             'arch': arch,
             'epoch': epoch,
-            'state_dict': self.model.state_dict(),
+            'state_dict': self.model.state_dict() ,
             'optimizer': self.optimizer.state_dict(),
             'monitor_best': self.mnt_best,
             'config': self.config
@@ -146,9 +147,12 @@ class BaseTrainer:
         filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}.pth'.format(self.fold_idx))
         if is_semi:
             filename = os.path.join(self.checkpoint_dir, 'pseudo_checkpoint_fold{}.pth'.format(self.fold_idx))
+        # elif (epoch % self.save_interval) == 0:
+        elif epoch >= (self.epochs - 10): # save last 10 epochs
+            filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}_{}.pth'.format(self.fold_idx, epoch))
         torch.save(state, filename)
+        
         self.logger.info("Saving checkpoint: {} ...".format(filename))
-
         if save_best:
             best_path = str(self.checkpoint_dir / 'model_best.pth')
             best_path = os.path.join(self.checkpoint_dir, 'model_best_fold{}'.format(self.fold_idx))

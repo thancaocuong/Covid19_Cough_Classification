@@ -1,0 +1,82 @@
+{
+    "name": "MobilenetV2_Audioset",
+    "n_gpu": 1,
+    "fp16": false,
+    "arch": {
+        "type": "Transfer_MobilenetV2",
+        "args": {
+                 "sample_rate": 22050,
+                 "window_size": 1024,
+                 "hop_size": 512,
+                 "mel_bins": 64,
+                 "fmin": 50,
+                 "fmax": 48000,
+                 "classes_num": 1,
+                 "freeze_base": false
+                }
+    },
+    "do_pseudo": true,
+    "unlabeled_dataset": {
+        "csv_path": "../dataset/public_test_sample_submission.csv",
+        "audio_folder": "../dataset/public_test_audio_files",
+        "training_batch_size": 16,
+        "num_workers": 10
+    },
+    "dataset": {
+        "test":{
+            "csv_path": "/home/asilla/sonnh/covid/data/aicv115m_final_public_test/public_test_sample_submission.csv",
+            "audio_folder": "/home/asilla/sonnh/covid/data/aicv115m_final_public_test/public_test_audio_files",
+            "period": 7,
+            "for_test": false
+        },
+        "train":{
+            "csv_path": "/home/asilla/sonnh/covid/data/final_augmented_fold_data_newkfold.csv",
+            "audio_folder": "/home/asilla/sonnh/covid/data/public_train_audio_files_augmented_new_kfold",
+            "period": 7,
+            "for_test": false
+
+        },
+        "val":{
+            "csv_path": "/home/asilla/sonnh/covid/data/final_augmented_fold_data_newkfold.csv",
+            "audio_folder": "/home/asilla/sonnh/covid/data/public_train_audio_files_augmented_new_kfold",
+            "for_test": true,
+            "period": 7
+        },
+        "training_batch_size": 64,
+        "validate_batch_size": 32,
+        "num_workers": 15,
+        "mfcc_config":
+            {
+                "do_remove_silent": true, "normalize": false, "use_derivative":false, "n_mfcc": 39, "n_fft": 2048, "hop_length": 512, "target_sr": 22050, "max_duration": 7
+            }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args":{
+            "lr": 0.0005
+        }
+    },
+    "loss": "bce_with_logits_loss",
+    "metrics": [
+        "roc_auc"
+    ],
+    "lr_scheduler": {
+        "type": "StepLR",
+        "args": {
+            "step_size": 10,
+            "gamma": 0.3162278
+        }
+    },
+    "trainer": {
+        "epochs": 25,
+
+        "save_dir": "saved/",
+        "save_period": 1,
+        "verbosity": 2,
+        "monitor": "max val_roc_auc",
+        "early_stop": 100,
+        "warmup": -1,
+        "tensorboard": true
+    },
+    "ema": false
+}

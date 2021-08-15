@@ -5,14 +5,15 @@ from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 from tqdm import tqdm
 from torch.cuda.amp import GradScaler
+from .ema import ModelEMA
 class Trainer(BaseTrainer):
     """
     Trainer class
     """
     def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
                  data_loader, valid_data_loader=None, unlabeled_loader=None,
-                 lr_scheduler=None, len_epoch=None, fold_idx=0, warmup=0, fp16=True):
-        super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx, warmup)
+                 lr_scheduler=None, len_epoch=None, fold_idx=0, warmup=0, fp16=False, multi_gpus=False):
+        super().__init__(model, criterion, metric_ftns, optimizer, config, fold_idx, warmup, multi_gpus)
         self.config = config
         self.device = device
         self.data_loader = data_loader
@@ -32,7 +33,12 @@ class Trainer(BaseTrainer):
         self.semi_epochs = 5
         self.scaler = GradScaler()
         self.fp16 = fp16
+        if self.config['ema']:
+            self.ema =  ModelEMA(self.model)
+        else:
+            self.ema = None
         print("Using Fp16 mode is" , self.fp16)
+        print("Using Ema mode is" , self.config['ema'])
         self.do_pseudo = self.unlabeled_loader is not None
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
@@ -103,6 +109,11 @@ class Trainer(BaseTrainer):
                     loss.item()))
             if batch_idx == self.len_epoch:
                 break
+            if self.ema:
+                self.ema.update(self.model)
+
+        if self.ema:
+            self.ema.update_attr(self.model, include=[])
         targets = torch.cat(targets)
         outputs = torch.cat(outputs)
         for met in self.metric_ftns:
@@ -124,7 +135,11 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains information about validation
         """
-        self.model.eval()
+        if self.ema is not None:
+            self.model_eval = self.ema.ema
+        else:
+            self.model_eval = self.model
+        self.model_eval.eval()
         self.valid_metrics.reset()
         targets = []
         outputs = []
@@ -132,7 +147,7 @@ class Trainer(BaseTrainer):
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
 
-                output = self.model(data)
+                output = self.model_eval(data)
                 loss = self.criterion(output, target)
                 targets.append(target.detach().cpu())
                 outputs.append(output.detach().cpu())
