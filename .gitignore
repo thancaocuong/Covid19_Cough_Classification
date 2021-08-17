@@ -2,7 +2,7 @@ saved/
 *.csv
 *.zip
 log*
-
+*.ipynb
 
 
 # Byte-compiled / optimized / DLL files
