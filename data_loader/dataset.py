@@ -7,9 +7,11 @@ from PIL import Image
 import numpy as np
 import cv2
 import librosa
+import random
 from .audio_preprocessing import mfcc_feature, extract_mfcc_feature
-# from .mel_spec import audio2melspec, create_spectrogram
 from .audio_preprocessing import trim_and_pad, padding_repeat, random_crop
+
+from transformers import Wav2Vec2Processor, Wav2Vec2Model
 
 import copy
 from multiprocessing import Pool
@@ -25,9 +27,6 @@ def load_audio_(i, df=None, target_sr=22050):
 
 def load_audio(df, target_sr):
     audios = {}
-#     for i in tqdm(range(len(df))):
-#         uuid, audio = load_audio_(i, df, target_sr)
-#         audios[uuid] = audio
 
     pool = Pool()
     tmp = pool.map(
@@ -64,6 +63,10 @@ class CovidDataset(torch.utils.data.Dataset):
         else:
             self.audios = None
 
+        # self.processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        # processor = Wav2Vec2Processor.from_pretrained(model_name_or_path,)
+        # target_sampling_rate = processor.feature_extractor.sampling_rate
+
     def get_label(self, idx):
         return self.df.iloc[idx]["assessment_result"].astype("float32")
 
@@ -93,21 +96,24 @@ class CovidDataset(torch.utils.data.Dataset):
                 audio, sr = sf.read(audio_path, dtype="float32")
             audio = librosa.resample(audio, sr, self.target_sr)
         
-        
+        # max_duration = random.choice(range(7, 16))
+        # max_samples =  max_duration * self.target_sr
         if self.test:
             audio = padding_repeat(audio, self.max_samples)
+            # audio = padding_repeat(audio, max_samples)
         else:
             audio = random_crop(audio, self.max_samples)
+            # audio = random_crop(audio, max_samples)
             # audio = trim_and_pad(audio, self.max_samples)
 
         if self.audio_transforms is not None:
-            # audio_path = item['audio_paths']
-            # uuid = audio_path.split('/')[-1].split('.')[0]
-            # if uuid[-2] != '_':
-            audio = self.audio_transforms(samples=audio, sample_rate=sr)
-            # else:
-            #     # print('oversampling no need to aug')
-            #     pass
+            audio_path = item['audio_paths']
+            uuid = audio_path.split('/')[-1].split('.')[0]
+            if uuid[-2] != '_':
+                audio = self.audio_transforms(samples=audio, sample_rate=sr)
+            else:
+                # print('oversampling no need to aug')
+                pass
 
         #mfcc
         # image = extract_mfcc_feature(audio, self.target_sr, self.mfcc_config)
@@ -120,4 +126,12 @@ class CovidDataset(torch.utils.data.Dataset):
         #     image = self.image_transform(image = image)['image']
 
         # return image, label_encoded
-        return audio, label_encoded
+
+        #* train 44 - 52
+        return torch.from_numpy(audio).float(), label_encoded
+
+        #* wav2vec2
+        # audio_ = self.processor(audio, sampling_rate=16000, return_tensors="pt", padding=True).input_values[0]  # Batch size 1
+        # return audio_.float(), label_encoded
+        
+        
