@@ -2,13 +2,14 @@ import numpy as np
 import torch
 from torchvision.utils import make_grid
 from base import BaseTrainer
-from utils import inf_loop, MetricTracker
+from utils import inf_loop, MetricTracker, SaveCsv
 from tqdm import tqdm
-from .ema import  ModelEMA
-
 from torch.cuda import amp
 # from trainer.mix import mixup
 
+from .ema import  ModelEMA
+import torch.nn as nn
+import os
 class Trainer(BaseTrainer):
     """
     Trainer class
@@ -27,7 +28,7 @@ class Trainer(BaseTrainer):
             self.ema =  ModelEMA(self.model)
         else:
             self.ema = None
-
+    
         self.data_loader = data_loader
         if len_epoch is None:
             # epoch-based training
@@ -47,6 +48,7 @@ class Trainer(BaseTrainer):
         self.do_pseudo = self.unlabeled_loader is not None
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
+        self.csv_save = SaveCsv(self.checkpoint_dir, fold_idx)
     def _semi_train_epoch(self):
         if self.do_pseudo:
             for epoch_idx in range(self.semi_epochs):
@@ -78,6 +80,47 @@ class Trainer(BaseTrainer):
             return log
         else:
             return False
+
+    def _save_checkpoint(self, epoch, save_best=False, is_semi=False):
+        """
+        Saving checkpoints
+
+        :param epoch: current epoch number
+        :param log: logging information of the epoch
+        :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
+        """
+        arch = type(self.model).__name__
+
+        if self.ema is not None:
+            state_dict = self.ema.ema.state_dict()
+        else:
+            state_dict = self.model.module.state_dict() if isinstance(self.model, nn.DataParallel) else self.model.state_dict()
+
+        state = {
+            'arch': arch,
+            'epoch': epoch,
+            'state_dict': state_dict,
+            # 'optimizer': self.optimizer.state_dict(),
+            'monitor_best': self.mnt_best,
+            'config': self.config
+        }
+        # filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
+        if self.only_save_best:
+            filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}.pth'.format(self.fold_idx))
+        else:
+            filename = os.path.join(self.checkpoint_dir, 'checkpoint_{}_fold{}.pth'.format(epoch, self.fold_idx))
+            
+        if is_semi:
+            filename = os.path.join(self.checkpoint_dir, 'pseudo_checkpoint_fold{}.pth'.format(self.fold_idx))
+        torch.save(state, filename)
+        self.logger.info("Saving checkpoint: {} ...".format(filename))
+
+        if save_best:
+            best_path = str(self.checkpoint_dir / 'model_best.pth')
+            best_path = os.path.join(self.checkpoint_dir, 'model_best_fold{}'.format(self.fold_idx))
+            torch.save(state, best_path)
+            self.logger.info("Saving current best: model_best.pth ...")
+
     def _train_epoch(self, epoch):
         """
         Training logic for an epoch
@@ -135,11 +178,16 @@ class Trainer(BaseTrainer):
             val_log = self._valid_epoch(epoch, self.valid_data_loader)
             log.update(**{'val_'+k : v for k, v in val_log.items()})
 
-            val_log = self._valid_epoch(epoch, self.valid_data_loader_warmup)
-            log.update(**{'val_warmup_'+k : v for k, v in val_log.items()})
+            # val_log = self._valid_epoch(epoch, self.valid_data_loader_warmup)
+            # log.update(**{'val_x3'+k : v for k, v in val_log.items()})
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
+            
+        csv_log = {'epoch': epoch}
+        for key in log:
+            csv_log[key] = log[key]
+        self.csv_save.update(csv_log)
         return log
 
     def _valid_epoch(self, epoch, valid_data_loader):
