@@ -90,7 +90,8 @@ class CNN14_Dataset(torch.utils.data.Dataset):
         audio_path = os.path.join(self.audio_folder, "%s.wav"%item['uuid'])
         audio, fs = librosa.load(audio_path)
         
-        if self.transform is not None and label_encoded == 1:
+        # if self.transform is not None and label_encoded == 1:
+        if self.transform is not None:
             try:
                 audio, fs = self.transform(audio, fs)
             except:

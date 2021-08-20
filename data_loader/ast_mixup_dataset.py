@@ -10,7 +10,7 @@ from pprint import pprint
 import os
 import pandas as pd
 
-class AstDataset(torch.utils.data.Dataset):
+class AstMixDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_params, transform=None, fold_idx=None):
         super().__init__()
         self.df = None
@@ -23,6 +23,7 @@ class AstDataset(torch.utils.data.Dataset):
         self.freqm = dataset_params.get("freqm", 48)
         self.noise = dataset_params.get("noise", False)
         self.timem = dataset_params.get("timem", 192)
+        self.mixup = dataset_params.get("mixup", 0.0)
         self.target_length = dataset_params.get("target_length", 512)
         self.norm_mean = dataset_params.get("norm_mean", -6.0542064)
         self.norm_std = dataset_params.get("std", 6.219794)
@@ -47,16 +48,42 @@ class AstDataset(torch.utils.data.Dataset):
             self.df = self.df[self.df["fold"] != self.fold_idx]
     def __len__(self):
         return self.df.shape[0]
-    def _wav2fbank(self, filename, label=-1):
+    def _wav2fbank(self, filename, label=-1, file_name2=None):
         # mixup
         waveform, sr = torchaudio.load(filename)
         waveform = waveform.cpu()
+        mix_lambda = 0
         if self.transform is not None and label == 1:
         # if self.transform is not None:
             waveform = waveform.unsqueeze(0)
             waveform = self.transform(waveform, sample_rate=sr)
             waveform = waveform.squeeze(0)
-        waveform = waveform - waveform.mean()
+        if file_name2 is not None:
+            # waveform1, sr = torchaudio.load(filename)
+            waveform2, _ = torchaudio.load(file_name2)
+
+            waveform = waveform - waveform.mean()
+            waveform2 = waveform2 - waveform2.mean()
+
+            if waveform.shape[1] != waveform2.shape[1]:
+                if waveform.shape[1] > waveform2.shape[1]:
+                    # padding
+                    temp_wav = torch.zeros(1, waveform.shape[1])
+                    temp_wav[0, 0:waveform2.shape[1]] = waveform2
+                    waveform2 = temp_wav
+                else:
+                    # cutting
+                    waveform2 = waveform2[0, 0:waveform.shape[1]]
+
+            # sample lambda from uniform distribution
+            #mix_lambda = random.random()
+            # sample lambda from beta distribtion
+            mix_lambda = np.random.beta(10, 10)
+
+            mix_waveform = mix_lambda * waveform + (1 - mix_lambda) * waveform2
+            waveform = mix_waveform - mix_waveform.mean()
+        else:
+            waveform = waveform - waveform.mean()
 
         fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
                                                   window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10)
@@ -72,7 +99,7 @@ class AstDataset(torch.utils.data.Dataset):
         elif p < 0:
             fbank = fbank[0:target_length, :]
 
-        return fbank
+        return fbank, mix_lambda
     
     def __getitem__(self, idx):
         item = self.df.iloc[idx]
@@ -83,12 +110,29 @@ class AstDataset(torch.utils.data.Dataset):
         # label_encoded[np.arange(label.size),int(label)] = 1
 
         audio_path = os.path.join(self.audio_folder, "%s.wav"%item['uuid'])
+        mixed_audio_path = None
+        labels = np.zeros(2)
+        labels[int(label_encoded)] = 1
+        labels = torch.FloatTensor(labels)
+        if random.random() < self.mixup and not self.for_test:
+            mix_sample_idx = random.randint(0, self.df.shape[0]-1)
+            mixed_data = self.df.iloc[mix_sample_idx]
+            mixed_label = mixed_data["assessment_result"]
+            mixed_audio_path = os.path.join(self.audio_folder, "%s.wav"%mixed_data['uuid'])
+            # get the mixed fbank
+            fbank, mix_lambda = self._wav2fbank(audio_path, label_encoded, mixed_audio_path)
+            # initialize the label
+            labels  = np.zeros(2)
+            labels[int(label_encoded)] += mix_lambda
+            labels[int(mixed_label)] += 1.0-mix_lambda
+            # add sample 1 labels
+            labels = torch.FloatTensor(labels)
+        elif not self.for_test:
+            fbank, _ = self._wav2fbank(audio_path, label_encoded, None)
 #         audio, fs = librosa.load(audio_path)
 #         max_samples = fs * self.period
-        if self.for_test:
-            fbank = self._wav2fbank(audio_path, -1)
         else:
-            fbank = self._wav2fbank(audio_path, label_encoded)
+            fbank, _ = self._wav2fbank(audio_path, -1)
         # if self.for_test:
         #     audio = padding_repeat(audio, max_samples)
         # else:
@@ -116,7 +160,7 @@ class AstDataset(torch.utils.data.Dataset):
 
 
         # the output fbank shape is [time_frame_num, frequency_bins], e.g., [1024, 128]
-        return fbank, torch.tensor(label_encoded).float()
+        return fbank, labels
 
 class AstTestDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_params):

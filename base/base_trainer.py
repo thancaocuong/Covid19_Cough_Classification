@@ -117,7 +117,7 @@ class BaseTrainer:
                     break
 
             if epoch % self.save_period == 0:
-                self._save_checkpoint(epoch, save_best=best)
+                self._save_checkpoint(epoch, save_best=best, auc=log[self.mnt_metric])
         self.logger.info("[Fold-{}]: Best score: {} at epoch {}".format(self.fold_idx,
                                                                         self.mnt_best,
                                                                         best_epoch))
@@ -126,7 +126,7 @@ class BaseTrainer:
             self._save_checkpoint(100, save_best=best, is_semi=True)
             for key, value in log_do_semi.items():
                 self.logger.info('    {:15s}: {}'.format(str(key), value))
-    def _save_checkpoint(self, epoch, save_best=False, is_semi=False):
+    def _save_checkpoint(self, epoch, save_best=False, is_semi=False, auc=0.0):
         """
         Saving checkpoints
 
@@ -136,19 +136,20 @@ class BaseTrainer:
         """
         arch = type(self.model).__name__
         state = {
-            'arch': arch,
+            # 'arch': arch,
+            'auc': auc,
             'epoch': epoch,
             'state_dict': self.model.state_dict() ,
-            'optimizer': self.optimizer.state_dict(),
+            # 'optimizer': self.optimizer.state_dict(),
             'monitor_best': self.mnt_best,
-            'config': self.config
+            # 'config': self.config
         }
         # filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
         filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}.pth'.format(self.fold_idx))
         if is_semi:
             filename = os.path.join(self.checkpoint_dir, 'pseudo_checkpoint_fold{}.pth'.format(self.fold_idx))
         # elif (epoch % self.save_interval) == 0:
-        elif epoch >= (self.epochs - 10): # save last 10 epochs
+        elif epoch >= (self.epochs - 15): # save last 10 epochs
             filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}_{}.pth'.format(self.fold_idx, epoch))
         torch.save(state, filename)
         

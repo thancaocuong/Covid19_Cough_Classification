@@ -6,6 +6,8 @@ import timm
 from .coordconv import CoordConv1d, CoordConv2d, CoordConv3d
 from .cnn14 import Cnn14
 from .mobilenetv2 import MobileNetV2
+from torch.cuda.amp import autocast
+from .ast import ASTModel
 
 def init_layer(layer):
     nn.init.xavier_uniform_(layer.weight)
@@ -19,6 +21,13 @@ def init_bn(bn):
     bn.bias.data.fill_(0.)
     bn.weight.data.fill_(1.0)
 
+
+
+def ast_model(label_dim=527, fstride=10, tstride=10,
+              input_fdim=128, input_tdim=1024,
+              imagenet_pretrain=True, audioset_pretrain=False,
+              model_size='base384', verbose=True):
+    return ASTModel(label_dim, fstride, tstride, input_fdim, input_tdim, imagenet_pretrain, audioset_pretrain, model_size, verbose)
 
 class Transfer_MobilenetV2(nn.Module):
     def __init__(self, sample_rate, window_size=512, hop_size=512, mel_bins=128, fmin=0, 

@@ -1,3 +1,4 @@
+
 {
     "name": "AST",
     "n_gpu": 1,
@@ -6,12 +7,13 @@
         "type": "ast_model",
         "args": {
                     "label_dim": 1,
-                    "fstride": 10,
-                    "tstride": 10,
+                    "fstride": 12,
+                    "tstride": 12,
                     "input_fdim": 128,
-                    "input_tdim": 512,
+                    "input_tdim": 1024,
                     "imagenet_pretrain": true,
-                    "audioset_pretrain": true,
+                    "audioset_pretrain": false,
+                    "model_size": "tiny224",
                     "verbose": true
                 }
     },
@@ -32,9 +34,9 @@
             "freqm": 0,
             "noise": false,
             "timem": 0,
-            "target_length": 512,
-            "norm_mean": -6.0542064,
-            "norm_std": 6.219794,
+            "target_length": 1024,
+            "norm_mean": -5.004784,
+            "norm_std": 6.11953,
             "skip_norm": false
         },
         "train":{
@@ -43,12 +45,12 @@
             "period": 7,
             "for_test": false,
             "melbins": 128,
-            "freqm": 48,
+            "freqm": 24,
             "noise": true,
             "timem": 96,
-            "target_length": 512,
-            "norm_mean": -6.0542064,
-            "norm_std": 6.219794,
+            "target_length": 1024,
+            "norm_mean": -5.004784,
+            "norm_std": 6.11953,
             "skip_norm": false
 
         },
@@ -61,12 +63,12 @@
             "freqm": 0,
             "noise": false,
             "timem": 0,
-            "target_length": 512,
-            "norm_mean": -6.0542064,
-            "norm_std": 6.219794,
+            "target_length": 1024,
+            "norm_mean": -5.004784,
+            "norm_std": 6.11953,
             "skip_norm": false
         },
-        "training_batch_size": 12,
+        "training_batch_size": 32,
         "validate_batch_size": 32,
         "num_workers": 15,
         "mfcc_config":
@@ -87,14 +89,14 @@
     "lr_scheduler": {
         "type": "StepLR",
         "args": {
-            "step_size": 20,
+            "step_size": 5,
             "gamma": 0.3162278
         }
     },
     "trainer": {
-        "epochs": 50,
+        "epochs": 25,
 
-        "save_dir": "saved/",
+        "save_dir": "/media/asilla/data124/thancuong/ckpt",
         "save_period": 1,
         "verbosity": 2,
         "monitor": "max val_roc_auc",
@@ -102,5 +104,5 @@
         "warmup": -1,
         "tensorboard": true
     },
-    "ema": false
+    "ema": true
 }

@@ -5,6 +5,7 @@ import gc
 import torch
 import numpy as np
 import pandas as pd
+from glob import glob
 from model import ASTModel
 import data_loader.data_loaders as module_data
 import model.loss as module_loss
@@ -39,6 +40,8 @@ class EnsembleModel(torch.nn.Module):
         outputs = []
         for i in range(len(self.models)):
             output = self.models[i](input)
+            if output.size(-1) == 2:
+                output = output[:, 1]
             outputs.append(torch.sigmoid(output).detach().cpu().item())
         return outputs
         # if self.post_process_func is not None:
@@ -50,22 +53,31 @@ def init_unlabeled_dataset(dataset_params):
 
 def main(config, args):
     unlabeled_dataset = init_unlabeled_dataset(config["dataset"]["test"])
-    device, device_ids = prepare_device(config['n_gpu'])
-    device = torch.device("cuda:0")
+    # device, device_ids = prepare_device(config['n_gpu'])
+    device = torch.device("cuda:1")
     model_dir = args.model_dir
 
-    CHECKPOINT = [os.path.join(model_dir, "model_best_fold1"),
-                  os.path.join(model_dir, "model_best_fold2"),
+    # CHECKPOINT = [os.path.join(model_dir, "model_best_fold1")]
+                #   os.path.join(model_dir, "model_best_fold2"),
                 #   os.path.join(model_dir, "model_best_fold3"),
                 #   os.path.join(model_dir, "model_best_fold4"),
                 #   os.path.join(model_dir, "model_best_fold5"),
-                 ]
+                #  ]
+    CHECKPOINT = glob(os.path.join(model_dir, "*fold{}*".format(args.fold)))
+    # CHECKPOINT = [os.path.join(model_dir, "model_best_fold3"),
+    #               os.path.join(model_dir, "checkpoint_fold3_10.pth"),
+    #               os.path.join(model_dir, "checkpoint_fold3_20.pth"),
+    #               os.path.join(model_dir, "checkpoint_fold3_30.pth"),
+    #               os.path.join(model_dir, "checkpoint_fold3_40.pth"),
+    #               os.path.join(model_dir, "checkpoint_fold3_50.pth"),
+    #              ]
     models = []
     for i in range(len(CHECKPOINT)):
+        print("loading checkpoint from %s" % CHECKPOINT[i])
         state = torch.load(CHECKPOINT[i], map_location="cpu")["state_dict"]
-        input_tdim = 512
-        model = ASTModel(input_tdim=input_tdim,label_dim=1, audioset_pretrain=True)
-        # model = config.init_obj('arch', module_arch)
+        # input_tdim = 512
+        # model = ASTModel(input_tdim=input_tdim,label_dim=1, audioset_pretrain=True)
+        model = config.init_obj('arch', module_arch)
         model.load_state_dict(state)
         model = model.to(device)
         models.append(model.eval())
@@ -77,26 +89,27 @@ def main(config, args):
     for i in range(len(unlabeled_dataset)):
         feature, id = unlabeled_dataset[i]
         with torch.no_grad():
-            feature = feature[None, ...].cuda()
+            feature = feature[None, ...].to(device)
             scores = ensemble_model(feature)
             refined_score = np.array(scores).mean()
             ensemble_result.loc[i] = [id, refined_score]
-            for idx, score_fold in enumerate(scores):
-                results[idx].loc[i] = [id, score_fold]
+            # for idx, score_fold in enumerate(scores):
+            #     results[idx].loc[i] = [id, score_fold]
 
         progress_bar.update(1)
-    if not os.path.exists(args.save_dir):
-        os.makedirs(args.save_dir)
-    ensemble_result.to_csv(os.path.join(args.save_dir, "results.csv"))
-    for idx, pd_results in enumerate(results):
-        fold_dir = os.path.join(args.save_dir, "fold{}".format(idx+1))
-        if not os.path.exists(fold_dir):
-            os.makedirs(fold_dir)
-        result_path = os.path.join(fold_dir, "results.csv")
-        pd_results.to_csv(result_path, index=False)
+    save_dir = os.path.join(os.path.join(args.save_dir, "fold%d"% args.fold))
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    ensemble_result.to_csv(os.path.join(save_dir, "results.csv"))
+    # for idx, pd_results in enumerate(results):
+    #     fold_dir = os.path.join(args.save_dir, "fold{}".format(idx+1))
+    #     if not os.path.exists(fold_dir):
+    #         os.makedirs(fold_dir)
+    #     result_path = os.path.join(fold_dir, "results.csv")
+    #     pd_results.to_csv(result_path, index=False)
     del models, ensemble_model
     gc.collect()
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
 if __name__ == '__main__':
     args = argparse.ArgumentParser(description='PyTorch Template')
     args.add_argument('-c', '--config', default=None, type=str,
@@ -109,6 +122,8 @@ if __name__ == '__main__':
                       type=str, help="model directory")
     args.add_argument("--save_dir", default="OOF_results",
                       type=str, help="saved fold results")
+    args.add_argument("--fold", default=1,
+                      type=int, help="fold, 1 to 5")
 
     # custom cli options to modify configuration from default values given in json file.
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')

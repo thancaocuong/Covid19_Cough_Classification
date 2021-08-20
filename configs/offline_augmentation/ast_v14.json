@@ -1,5 +1,6 @@
+
 {
-    "name": "AST",
+    "name": "AST_MIX_LARGE",
     "n_gpu": 1,
     "fp16": true,
     "arch": {
@@ -12,6 +13,7 @@
                     "input_tdim": 512,
                     "imagenet_pretrain": true,
                     "audioset_pretrain": true,
+                    "model_size": "base384",
                     "verbose": true
                 }
     },
@@ -30,6 +32,7 @@
             "period": 7,
             "melbins": 128,
             "freqm": 0,
+            "mixup": 0,
             "noise": false,
             "timem": 0,
             "target_length": 512,
@@ -43,7 +46,7 @@
             "period": 7,
             "for_test": false,
             "melbins": 128,
-            "freqm": 48,
+            "freqm": 24,
             "noise": true,
             "timem": 96,
             "target_length": 512,
@@ -67,7 +70,7 @@
             "skip_norm": false
         },
         "training_batch_size": 12,
-        "validate_batch_size": 32,
+        "validate_batch_size": 12,
         "num_workers": 15,
         "mfcc_config":
             {
@@ -77,7 +80,7 @@
     "optimizer": {
         "type": "Adam",
         "args":{
-            "lr": 0.0005
+            "lr": 2.5e-4
         }
     },
     "loss": "bce_with_logits_loss",
@@ -85,16 +88,17 @@
         "roc_auc"
     ],
     "lr_scheduler": {
-        "type": "StepLR",
+        "type": "MultiStepLR",
         "args": {
-            "step_size": 20,
-            "gamma": 0.3162278
+            "milestones": [5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+                            15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25],
+            "gamma": 0.85
         }
     },
     "trainer": {
-        "epochs": 50,
+        "epochs": 30,
 
-        "save_dir": "saved/",
+        "save_dir": "/media/asilla/data124/thancuong/ckpt",
         "save_period": 1,
         "verbosity": 2,
         "monitor": "max val_roc_auc",
@@ -102,5 +106,5 @@
         "warmup": -1,
         "tensorboard": true
     },
-    "ema": false
+    "ema": true
 }
