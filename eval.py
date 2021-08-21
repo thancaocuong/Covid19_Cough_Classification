@@ -52,10 +52,10 @@ def main(config):
                                                 )
     device, device_ids = prepare_device(config['n_gpu'])
     CHECKPOINT = ["saved/models/Covid19-PlainCNN/0730_215235/model_best_fold1",
-        "saved/models/Covid19-PlainCNN/0730_215235/model_best_fold2"
-        # "saved/models/Covid19-PlainCNN/0730_215235/model_best_fold3",
-        # "saved/models/Covid19-PlainCNN/0730_215235/model_best_fold4",
-        # "saved/models/Covid19-PlainCNN/0730_215235/model_best_fold5"
+        "saved/models/Covid19-PlainCNN/0730_215235/model_best_fold2",
+        "saved/models/Covid19-PlainCNN/0730_215235/model_best_fold3",
+        "saved/models/Covid19-PlainCNN/0730_215235/model_best_fold4",
+        "saved/models/Covid19-PlainCNN/0730_215235/model_best_fold5"
         ]
     models = []
     for i in range(len(CHECKPOINT)):
@@ -64,7 +64,7 @@ def main(config):
         model.load_state_dict(state)
         model = model.to(device)
         models.append(model.eval())
-    ensemble_model = EnsembleModel(models, None, [0.5, 0.5])
+    ensemble_model = EnsembleModel(models, None)
     ensemble_model.cuda().eval()
     results = pd.DataFrame(columns=['uuid', 'assessment_result'])
     progress_bar = tqdm(total=len(unlabeled_dataset))

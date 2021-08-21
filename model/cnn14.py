@@ -160,7 +160,7 @@ class Cnn14(nn.Module):
         self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
             freq_drop_width=8, freq_stripes_num=2)
 
-        self.bn0 = nn.BatchNorm2d(64)
+        self.bn0 = nn.BatchNorm2d(mel_bins)
 
         self.conv_block1 = ConvBlock(in_channels=1, out_channels=64)
         self.conv_block2 = ConvBlock(in_channels=64, out_channels=128)

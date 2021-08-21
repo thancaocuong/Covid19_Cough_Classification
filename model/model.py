@@ -15,6 +15,37 @@ from .wave2vec import *
 from torchlibrosa.stft import Spectrogram, LogmelFilterBank
 from torchlibrosa.augmentation import SpecAugmentation
 
+class StackNet(BaseModel):
+    def __init__(self, num_classes=1, num_features = 10):
+        super().__init__()
+        self.head = nn.Sequential(
+            nn.Linear(num_features, 32, bias=True),
+            nn.ReLU(),
+            nn.BatchNorm1d(32),
+            nn.Dropout(0.2),
+            nn.Linear(32, num_classes, bias=True),
+        )
+    def forward(self, x, fp16 = False):
+        return self.head(x)
+
+class StackNet2(BaseModel):
+    def __init__(self, num_classes=1, num_features = 10):
+        super().__init__()
+        self.head = nn.Sequential(
+            nn.Linear(num_features, 32, bias=True),
+            nn.ReLU(),
+            nn.BatchNorm1d(32),
+
+            nn.Linear(32, 32, bias=True),
+            nn.ReLU(),
+            nn.BatchNorm1d(32),
+            
+            nn.Dropout(0.2),
+            nn.Linear(32, num_classes, bias=True),
+        )
+    def forward(self, x, fp16 = False):
+        return self.head(x)
+
 class PlainCNN(BaseModel):
     def __init__(self, inchannels=3, num_classes=1, use_coord=False, pretrained=True, mfcc_config = None, melspec_config = None):
         super().__init__()
@@ -184,7 +215,6 @@ class PlainCNNSmall(BaseModel):
             x = self.fc3(x)
         return x
 
-
 def init_layer(layer):
     nn.init.xavier_uniform_(layer.weight)
 
@@ -192,11 +222,9 @@ def init_layer(layer):
         if layer.bias is not None:
             layer.bias.data.fill_(0.)
 
-
 def init_bn(bn):
     bn.bias.data.fill_(0.)
     bn.weight.data.fill_(1.0)
-
 
 class Transfer_Cnn14(BaseModel):
     def __init__(self, sample_rate, window_size=512, hop_size=512, mel_bins=128, fmin=0, 
@@ -210,14 +238,19 @@ class Transfer_Cnn14(BaseModel):
             fmax, audioset_classes_num)
 
         # Transfer to another task layer
+        # self.head = torch.nn.Sequential(
+        #     nn.Linear(2048, 512, bias=True),
+        #     nn.ReLU(),
+        #     nn.Dropout(0.2),
+        #     nn.Linear(512, 256, bias=True),
+        #     nn.ReLU(),
+        #     nn.Dropout(0.2),
+        #     nn.Linear(256, classes_num, bias=True)
+        # )
+
         self.head = torch.nn.Sequential(
-            nn.Linear(2048, 512, bias=True),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(512, 256, bias=True),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(256, classes_num, bias=True)
+            nn.Dropout(0.5),
+            nn.Linear(2048, classes_num, bias=True),
         )
         if freeze_base:
             print("freeze base layer")
@@ -430,8 +463,12 @@ class TimmBackbone(BaseModel):
             freeze_parameters=True)
 
         # Spec augmenter
+        #7s
         self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
             freq_drop_width=8, freq_stripes_num=2)
+
+        # self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=3, 
+        #     freq_drop_width=8, freq_stripes_num=3)
 
         self.bn0 = nn.BatchNorm2d(mel_bins)
 
@@ -510,7 +547,6 @@ class TropicModel(BaseModel):
         if self.coord: x = torch.cat((x,coord),dim=1)
         x = self.do(x)
         return self.trunk(x)
-
 
 class VitModel(BaseModel):
     def __init__(self, backbone, out_dim, embedding_size=512, 

@@ -9,7 +9,7 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from data_loader import CovidDataset
+from data_loader import CovidDataset, CovidStackDataset
 from data_loader import AudioCompose, WhiteNoise, TimeShift, ChangePitch, ChangeSpeed
 from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, Gain, PolarityInversion, AddGaussianSNR, Normalize
 from parse_config import ConfigParser
@@ -22,8 +22,7 @@ from albumentations.pytorch.transforms import ToTensorV2
 import albumentations as albu
 
 # fix random seeds for reproducibility
-# SEED = 123
-SEED = 1997
+SEED = 123
 torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -72,19 +71,10 @@ def cut_x5(df_train):
 
 
 
-def init_dataset(csv_path, config=None, fold_idx=1, audio_folder=""):
+def init_dataset(csv_path, config=None, fold_idx=1):
     print("*"*10, " fold {}".format(fold_idx), "*"*10)
     """StratifiedKFold"""
-    # df_path = os.path.join(csv_path)
-    # df = pd.read_csv(df_path)
-    # df_final = pd.read_csv('/home/hana/sonnh/data/AICovidVN/aicv115m_public_train_full/aicv115m_final_public_train/remove_duplicate/group_included_rmsingle2_kfold_oversampling_new_format.csv')
-    # df_final = cut_x3(df_final)
-    # df_coswara = pd.read_csv('/home/hana/sonnh/data/AICovidVN/coswara/info_kfold_new_format_oversampling.csv')
-    # df_coswara = cut_x3(df_coswara)
-    # df_vifury = pd.read_csv('/home/hana/sonnh/data/AICovidVN/virufy-cdf-coughvid/fillter_rm_slient_kfold_new_format_oversampling.csv')
-    # df_vifury = cut_x3(df_vifury)
-    # df_vifury = df_vifury[df_vifury['assessment_result']==1]
-    # df_external = pd.concat([df_final, df_coswara, df_vifury])
+
 
     #* train 29, 31
     df_final = pd.read_csv(csv_path)
@@ -95,120 +85,17 @@ def init_dataset(csv_path, config=None, fold_idx=1, audio_folder=""):
     eval_df = df_external[df_external["fold"] == fold_idx]
     train_df = df_external[df_external["fold"] != fold_idx]
     eval_df = cut_x5(eval_df)
-    # train_audio_transform = AudioCompose([WhiteNoise(0.005),
-    #                                       TimeShift(),
-    #                                       ChangeSpeed()])
-    # train_audio_transform = OneOf([
-    #                 AddGaussianNoise(min_amplitude=0.01, max_amplitude=0.05, p=1),
-    #                 AddGaussianSNR(min_SNR=0.1, max_SNR=0.56, p=1), # new
-    #                 TimeStretch(min_rate=0.9, max_rate=1.2, p=1),
-    #                 PitchShift(min_semitones=-4, max_semitones=4, p=1),
-    #                 Shift(min_fraction=-0.5, max_fraction=0.5, p=1),
-    #                 PolarityInversion(p = 1),
-    #                 Gain(min_gain_in_db=-15,max_gain_in_db=15,p=1)
-    #             ], p=1.0)
 
-    #* train 62, 65, 66
-    train_audio_transform = Compose([
-        # AddBackgroundNoise( # mixup audio level
-        #     sounds_path = '/media/sonnh/AICOVIDVN/aicv115m_public_train/mixup',  # background audio folder không có tiếng ho
-        #     min_snr_in_db=5,  #Minimum signal-to-noise ratio in dB, tỉ lệ db giữa tiếng gốc và tiếng mix
-        #     max_snr_in_db=30,
-        #     p=0.5
-        # ),
-        
-        OneOf([
-            AddGaussianNoise(
-                min_amplitude=0.01, 
-                max_amplitude=0.05, 
-                p=0.9),
-            AddGaussianSNR(
-                min_snr_in_db=10, #Minimum signal-to-noise ratio in db. A lower number means more noise.
-                max_snr_in_db=20, 
-                p=0.9),
-        ], p=0.5),
-        
-        OneOf([
-            TimeStretch(
-                min_rate=0.8, 
-                max_rate=1.2, 
-                p=0.9), #nén hoặc kéo gián audio
-            Shift(
-                min_fraction=0.3, 
-                max_fraction=0.7, 
-                p=0.9), # dich chuyển audio , đầu đuôi nối nhau 
-            PitchShift(min_semitones=-4, max_semitones=4, p=0.9),
-            Gain(min_gain_in_db=-15,max_gain_in_db=15,p=0.9)
-        ], p=0.5),
-        
-        Normalize(p = 1)
-    ])
-
-    val_audio_transform = Compose([
-        Normalize(p = 1)
-    ])
-
-
-    #* ngoai tru 62, 65, 66
-    # train_audio_transform = OneOf([
-    #                 AddGaussianNoise(min_amplitude=0.01, max_amplitude=0.05, p=0.5),
-    #                 AddGaussianSNR(p=0.5), # new
-    #                 TimeStretch(min_rate=0.9, max_rate=1.2, p=0.5),
-    #                 PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
-    #                 Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
-    #                 PolarityInversion(p=0.5),
-    #                 Gain(
-    #                     min_gain_in_db=-15.0,
-    #                     max_gain_in_db=5.0,
-    #                     p=0.5,),
-    #             ], p=1.0)
-    # val_audio_transform = None
-
-    train_dataset = CovidDataset(
-            # df=train_df[:200],
+    train_dataset = CovidStackDataset(
             df=train_df,
             config=config,
-            audio_folder=audio_folder,
-            audio_transforms=train_audio_transform,
-            image_transform=None,
         )
 
-    validation_dataset = CovidDataset(
-                                # df=eval_df[:200],
-                                df=eval_df,
-                                config=config,
-                                audio_folder=audio_folder,
-                                test = True,
-                                audio_transforms=val_audio_transform,
-                                image_transform=None,
-                            )
-
-    # df_final = pd.read_csv(csv_path)
-    # df_final = cut_x3(df_final)
-    # eval_df = df_final[df_final["fold"] == fold_idx]
-    validation_dataset_warmup = CovidDataset(
-                                df=eval_df[:5],
-                                config=config,
-                                audio_folder=audio_folder,
-                                test = True,
-                                audio_transforms=val_audio_transform,
-                                image_transform=None,
-                            )
-
-
-    # train_dataset = VitDataset(
-    #     df=train_df[:200],
-    #     audio_folder=audio_folder,
-    #     train_aug=train_audio_transform,
-    # )
-
-    # validation_dataset = VitDataset(
-
-    #     df=eval_df[:200],
-    #     audio_folder=audio_folder,
-    #     train_aug=None,
-    # )
-    return train_dataset, validation_dataset, validation_dataset_warmup
+    val_dataset = CovidStackDataset(
+            df=eval_df,
+            config=config,
+        )
+    return train_dataset, val_dataset
 
 
 def init_unlabeled_dataset(csv_path, audio_folder="", mfcc_config=None):
@@ -217,10 +104,10 @@ def init_unlabeled_dataset(csv_path, audio_folder="", mfcc_config=None):
 
 def main(config, fold_idx):
     logger = config.get_logger('train')
-    train_dataset, val_dataset, validation_dataset_warmup = init_dataset(config["dataset"]["csv_path"],
+    train_dataset, val_dataset = init_dataset(config["dataset"]["csv_path"],
                                               config,  
-                                             fold_idx,
-                                             config["dataset"]["audio_folder"])
+                                             fold_idx
+                                             )
     # setup data_loader instances
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -232,11 +119,6 @@ def main(config, fold_idx):
     )
     eval_loader = torch.utils.data.DataLoader(
         val_dataset,
-        batch_size=config["dataset"]['validate_batch_size'], 
-        num_workers=config["dataset"]['num_workers']
-    )
-    eval_loader_warmup = torch.utils.data.DataLoader(  
-        validation_dataset_warmup,
         batch_size=config["dataset"]['validate_batch_size'], 
         num_workers=config["dataset"]['num_workers']
     )
@@ -283,7 +165,6 @@ def main(config, fold_idx):
                       device=device,
                       data_loader=train_loader,
                       valid_data_loader=eval_loader,
-                      valid_data_loader_warmup = eval_loader_warmup,
                       unlabeled_loader=unlabeled_loader,
                       lr_scheduler=lr_scheduler,
                       fold_idx=fold_idx
@@ -292,8 +173,7 @@ def main(config, fold_idx):
     trainer.train()
     model = model.to("cpu")
     del model, optimizer, trainer
-    del train_loader, eval_loader, eval_loader_warmup, train_dataset, val_dataset, validation_dataset_warmup
-
+    del train_loader, eval_loader, train_dataset, val_dataset
     gc.collect()
     torch.cuda.empty_cache()
 

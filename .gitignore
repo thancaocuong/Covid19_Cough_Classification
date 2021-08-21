@@ -1,7 +1,8 @@
-saved/
+saved*
 *.csv
 *.zip
 log*
+configs/*.json
 *.ipynb
 
 

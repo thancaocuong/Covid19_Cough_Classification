@@ -6,7 +6,7 @@ from utils import inf_loop, MetricTracker, SaveCsv
 from tqdm import tqdm
 from torch.cuda import amp
 # from trainer.mix import mixup
-
+import pandas as pd
 from .ema import  ModelEMA
 import torch.nn as nn
 import os
@@ -80,6 +80,30 @@ class Trainer(BaseTrainer):
             return log
         else:
             return False
+    
+    def _save_only_top_10(self):
+        top_n_model = 10
+        self.df = pd.DataFrame(self.csv_save.df)
+        top_auc = self.df.sort_values(by='val_roc_auc', ascending=False)
+        top10_auc = list(top_auc['epoch'][:top_n_model])
+        # print(top10_auc)
+
+        top_loss = self.df.sort_values(by='val_loss')
+        top10_loss = list(top_loss['epoch'][:top_n_model])
+        # print(top10_loss)
+
+        top10 = list(set(top10_auc + top10_loss))
+        # print(top10)
+
+        for epoch in self.df['epoch']:
+            filename = os.path.join(self.checkpoint_dir, 'checkpoint_{}_fold{}.pth'.format(epoch, self.fold_idx))
+            # print(filename)
+            if os.path.isfile(filename):
+                if epoch not in top10:
+                    os.remove(filename)
+
+
+
 
     def _save_checkpoint(self, epoch, save_best=False, is_semi=False):
         """
@@ -109,7 +133,7 @@ class Trainer(BaseTrainer):
             filename = os.path.join(self.checkpoint_dir, 'checkpoint_fold{}.pth'.format(self.fold_idx))
         else:
             filename = os.path.join(self.checkpoint_dir, 'checkpoint_{}_fold{}.pth'.format(epoch, self.fold_idx))
-            
+            self._save_only_top_10()
         if is_semi:
             filename = os.path.join(self.checkpoint_dir, 'pseudo_checkpoint_fold{}.pth'.format(self.fold_idx))
         torch.save(state, filename)
@@ -133,7 +157,10 @@ class Trainer(BaseTrainer):
         targets = []
         outputs = []
         self.optimizer.zero_grad()
-        for batch_idx, (data, target) in enumerate(tqdm(self.data_loader)):
+        # for batch_idx, (data, target) in enumerate(tqdm(self.data_loader)):
+        for batch_idx, info in enumerate(tqdm(self.data_loader)):
+            data = info['data']
+            target = info['target']
             data, target = data.to(self.device), target.to(self.device)
             with amp.autocast(enabled=self.fp16):
 
@@ -212,7 +239,10 @@ class Trainer(BaseTrainer):
         targets = []
         outputs = []
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(tqdm(valid_data_loader)):
+            # for batch_idx, (data, target) in enumerate(tqdm(valid_data_loader)):
+            for batch_idx, info in enumerate(tqdm(valid_data_loader)):
+                data = info['data']
+                target = info['target']
                 data, target = data.to(self.device), target.to(self.device)
                 target = target.to(dtype=torch.long)
                 output = self.model_eval(data)

@@ -16,6 +16,7 @@ from transformers import Wav2Vec2Processor, Wav2Vec2Model
 import copy
 from multiprocessing import Pool
 from functools import partial
+import pickle
 
 def load_audio_(i, df=None, target_sr=22050):
     item = df.iloc[i]
@@ -128,10 +129,150 @@ class CovidDataset(torch.utils.data.Dataset):
         # return image, label_encoded
 
         #* train 44 - 52
-        return torch.from_numpy(audio).float(), label_encoded
+        info = {
+            'data': torch.from_numpy(audio).float(),
+            'target': label_encoded,
+            'uuid': item['uuid']
+        }
+        return info
+
+        # return torch.from_numpy(audio).float(), label_encoded
 
         #* wav2vec2
         # audio_ = self.processor(audio, sampling_rate=16000, return_tensors="pt", padding=True).input_values[0]  # Batch size 1
         # return audio_.float(), label_encoded
         
+        
+
+class CovidStackDataset(torch.utils.data.Dataset):
+    def __init__(self, df, config, test = False):
+        super().__init__()
+        self.df = df
+        data_path = config['dataset']['data_path']
+
+
+        with open(data_path, 'rb') as handle:
+            self.data = pickle.load(handle)
+
+        self.test = test
+
+    def get_label(self, idx):
+        return self.df.iloc[idx]["assessment_result"].astype("float32")
+
+    def __len__(self):
+        return self.df.shape[0]
+    
+    def get_feature(self, uuid):
+        feature = []
+        exps = [
+                57,
+                58,
+                59,
+                63,
+                64,
+                65,
+                'ast_v4_stack',
+                'ast_v5_stack',
+                'ast_v6_stack',
+                'ast_v7_stack',
+                'ast_v8_stack',
+                'ast_v16_stack',
+                'ast_v17_stack'
+            ]
+
+        for exp in exps:
+            # print(self.data[exp][uuid])
+            prob = sum(self.data[exp][uuid]['feature']) / len(self.data[exp][uuid]['feature'])
+            feature.append(prob)
+
+        return feature
+
+    def __getitem__(self, idx):
+        item = self.df.iloc[idx]
+        uuid = item['uuid']
+        label = item["assessment_result"].astype("float32")
+        label_encoded = torch.tensor(label, dtype=torch.long)
+
+        # feature = self.data[uuid]['feature']
+        # feature = [float(item['feature_{}'.format(i)]) for i in range(9, 19)]
+        feature = self.get_feature(uuid)
+
+        
+        feature = np.array(feature)
+
+        info = {
+            'data': torch.from_numpy(feature).float(),
+            'target': label_encoded,
+            'uuid': item['uuid']
+        }
+        return info
+        # return torch.from_numpy(feature).float(), label_encoded
+
+
+class CovidStackTestDataset(torch.utils.data.Dataset):
+    def __init__(self, df, config, fold, test = False):
+        super().__init__()
+        self.df = df
+        data_path = config['dataset']['data_path']
+        self.fold = fold
+
+        with open(data_path, 'rb') as handle:
+            self.data = pickle.load(handle)
+
+        self.test = test
+
+    def get_label(self, idx):
+        return self.df.iloc[idx]["assessment_result"].astype("float32")
+
+    def __len__(self):
+        return self.df.shape[0]
+    
+    def get_feature(self, uuid):
+        feature = []
+        exps = [
+                57,
+                58,
+                59,
+                63,
+                64,
+                65,
+                'ast_v4_stack',
+                'ast_v5_stack',
+                'ast_v6_stack',
+                'ast_v7_stack',
+                'ast_v8_stack',
+                'ast_v16_stack',
+                'ast_v17_stack'
+            ]
+
+        for exp in exps:
+            # print(self.data[exp][uuid])
+            # print(self.data[exp].keys())
+            prob = sum(self.data[exp][self.fold][uuid]['feature']) / len(self.data[exp][self.fold][uuid]['feature'])
+            feature.append(prob)
+
+        return feature
+
+    def __getitem__(self, idx):
+        item = self.df.iloc[idx]
+        uuid = item['uuid']
+        label = item["assessment_result"].astype("float32")
+        label_encoded = torch.tensor(label, dtype=torch.long)
+
+        # feature = self.data[uuid]['feature']
+        # feature = [float(item['feature_{}'.format(i)]) for i in range(9, 19)]
+        feature = self.get_feature(uuid)
+
+        
+        feature = np.array(feature)
+
+        info = {
+            'data': torch.from_numpy(feature).float(),
+            'target': label_encoded,
+            'uuid': item['uuid']
+        }
+        return info
+        # return torch.from_numpy(feature).float(), label_encoded
+
+
         
