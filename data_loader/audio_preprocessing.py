@@ -239,10 +239,26 @@ def padding_repeat(audio, max_samples):
     
     return new_audio
 
+def padding_0_center_crop(audio, max_length):
+    len_y = audio.shape[0]
+
+    if len_y < max_length:
+        new_y = np.zeros(max_length, dtype=audio.dtype)
+        start = 0
+        new_y[start:start + len_y] = audio
+        audio = new_y.astype(np.float32)
+    elif len_y > max_length:
+        trim_length = len_y - max_length
+        audio = audio[int(trim_length//2):int(max_length+trim_length//2)]
+    else:
+        audio = audio.astype(np.float32)
+    return audio
+
 def random_crop(audio, max_length):
     len_y = audio.shape[0]
     if len_y < max_length:
-        audio = padding_repeat(audio, max_length)
+        # audio = padding_repeat(audio, max_length)
+        audio = padding_0_center_crop(audio, max_length)
         # new_y = np.zeros(max_length, dtype=audio.dtype)
         # start = np.random.randint(max_length - len_y)
         # new_y[start:start + len_y] = audio
