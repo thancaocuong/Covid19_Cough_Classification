@@ -1,6 +1,6 @@
 {
     "name": "57-Covid19-Eff_b7",
-    "n_gpu": 2,
+    "n_gpu": 1,
     "fp16": false,
     "ema": false,
 
